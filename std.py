@@ -22,7 +22,7 @@ def Stmt_Class(processor, node):
 def Stmt_ClassMethod(processor, node):
 	# FunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list)
 	args = [ast.Name('self', [])] + processor.process(node.params)
-	arguments = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[])
+	arguments = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[ast.Name('self', [])])
 	body = processor.process(node.stmts)
 	return ast.FunctionDef(node.name, arguments, body, [])
 
