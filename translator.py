@@ -22,7 +22,7 @@ class PHPNode(Dict):
 
 def getPHPAst(file):
 	result = os.popen("php ast.php " + file).read()
-	if result.startswith('Parse error'):
+	if result.startswith('Parse Error'):
 		raise Exception(result)
 	return json(result, PHPNode)
 
@@ -55,4 +55,4 @@ class Processor(object):
 		return self.scope.getTranslator(node)(self, node)
 
 	def translate(self, nodes):
-		return self.process(nodes)
+		return self.process(nodes[0])
