@@ -32,6 +32,10 @@ def Stmt_ClassMethod(processor, node):
 	return ast.FunctionDef(node.name, arguments, body, [])
 
 @stdScope.registerTranslator
+def Stmt_Return(processor, node):
+	return ast.Return(processor.process(node.expr))
+
+@stdScope.registerTranslator
 def Scalar_LNumber(processor, node):
 	# Num(object n)
 	return ast.Num(node.value)
@@ -102,7 +106,7 @@ def Expr_FuncCall(processor, node):
 @stdScope.registerTranslator
 def Expr_StaticCall(processor, node):
 	if node['class'].parts[0] == 'self':
-		return ast.Name(node.name, [])
+		return ast.Call(ast.Name(node.name, []), processor.process(node.args), [], None, None)
 	return ast.Call(ast.Attribute(processor.process(node['class']), node.name, []), processor.process(node.args), [], None, None)
 
 @stdScope.registerTranslator
