@@ -1,8 +1,7 @@
 <?php
 
 
-require dirname(__FILE__) . '/PHPParser/Autoloader.php';
-PHPParser_Autoloader::register();
+require_once(dirname(__FILE__) . '/phpparser/lib/bootstrap.php');
 
 $code = file_get_contents($argv[1]);
 
@@ -16,4 +15,4 @@ try {
     echo 'Parse Error: ', $e->getMessage();
 }
 
-
+?>
