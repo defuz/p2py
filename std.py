@@ -193,3 +193,10 @@ registerCmpOp('Expr_Smaller', ast.Lt)
 registerCmpOp('Expr_SmallerOrEqual', ast.LtE)
 registerCmpOp('Expr_Identical', ast.Is)
 registerCmpOp('Expr_NotIdentical', ast.IsNot)
+
+
+@stdScope.registerTranslator
+def Stmt_If(processor, node):
+	ifnodes = node.elseifs[::-1] + [node]
+	elsestmts = processor.process(getattr(node['else'], 'stmts', []))
+	return reduce(lambda r, n: [ast.If(processor.process(n.cond), processor.process(n.stmts), r)], ifnodes, elsestmts)[0]
