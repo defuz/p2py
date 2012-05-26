@@ -50,8 +50,7 @@ class Scope(object):
 
 class Processor(object):
 
-	def __init__(self, scope, debug=False):
-		self.debug = debug
+	def __init__(self, scope):
 		self.scope = scope
 
 	def process(self, node):

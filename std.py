@@ -73,3 +73,70 @@ def Stmt_PropertyProperty(processor, node):
 @stdScope.registerTranslator
 def Stmt_Property(processor, node):
 	return processor.process(node.props)[0]
+
+
+##### Expr
+
+@stdScope.registerTranslator
+def Stmt_Echo(processor, node):
+	return ast.Print(None, processor.process(node.exprs), True)
+
+
+def registerBinaryOp(phpNodeName, pythonOp):
+	def translator(processor, node):
+		return ast.BinOp(processor.process(node.left), pythonOp(), processor.process(node.right))
+	translator.__name__ = phpNodeName
+	stdScope.registerTranslator(translator)
+
+def registerBoolOp(phpNodeName, pythonOp):
+	def translator(processor, node):
+		return ast.BoolOp(pythonOp(), [processor.process(node.left), processor.process(node.right)])
+	translator.__name__ = phpNodeName
+	stdScope.registerTranslator(translator)
+
+
+def registerUnaryOp(phpNodeName, pythonOp):
+	def translator(processor, node):
+		return ast.UnaryOp(pythonOp(), processor.process(node.expr))
+	translator.__name__ = phpNodeName
+	stdScope.registerTranslator(translator)
+
+def registerCmpOp(phpNodeName, pythonOp):
+	def translator(processor, node):
+		return ast.Compare(processor.process(node.left), [pythonOp()], [processor.process(node.right)])
+	translator.__name__ = phpNodeName
+	stdScope.registerTranslator(translator)
+
+
+registerBinaryOp('Expr_Plus', ast.Add)
+registerBinaryOp('Expr_Minus', ast.Sub)
+registerBinaryOp('Expr_Mul', ast.Mult)
+registerBinaryOp('Expr_Div', ast.Div)
+registerBinaryOp('Expr_Mod', ast.Mod)
+registerBinaryOp('Expr_ShiftLeft', ast.LShift)
+registerBinaryOp('Expr_ShiftRight', ast.RShift)
+
+registerBinaryOp('Expr_BitwiseAnd', ast.BitAnd)
+registerBinaryOp('Expr_BitwiseOr', ast.BitOr)
+registerBinaryOp('Expr_BitwiseXor', ast.BitXor)
+
+registerBinaryOp('Expr_Concat', ast.Add)
+
+registerUnaryOp('Expr_UnaryPlus', ast.UAdd)
+registerUnaryOp('Expr_UnaryMinus', ast.USub)
+registerUnaryOp('Expr_BooleanNot', ast.Not) # xxx: if value is int -> use invert
+
+registerBoolOp('Expr_BooleanAnd', ast.And)
+registerBoolOp('Expr_BooleanOr', ast.Or)
+
+registerBoolOp('Expr_LogicalAnd', ast.And)
+registerBoolOp('Expr_LogicalOr', ast.Or)
+registerBinaryOp('Expr_LogicalXor', ast.BitXor)# todo: LogicalXor ???
+
+registerCmpOp('Expr_Equal', ast.Eq)
+registerCmpOp('Expr_Greater', ast.Gt)
+registerCmpOp('Expr_GreaterOrEqual', ast.GtE)
+registerCmpOp('Expr_Smaller', ast.Lt)
+registerCmpOp('Expr_SmallerOrEqual', ast.LtE)
+registerCmpOp('Expr_Identical', ast.Is)
+registerCmpOp('Expr_NotIdentical', ast.IsNot)

@@ -4,18 +4,15 @@
 from codegen import to_source
 from std import stdScope
 from translator import *
-import sys
 
 import sys
 
 def generate(file):
 	processor = Processor(stdScope)
 	phpAst = getPHPAst(file)
-	print phpAst
 	pythonAst = processor.translate(phpAst)
 	return to_source(pythonAst)
 
-#print to_source(ast.ClassDef('Test', (ast.Name('A', ()), ast.Name('B', ())), [ast.Assign([ast.Name('x', ())], ast.Num(4))], ()))
 
 if len(sys.argv) < 2:
 	print("Please specify filename")
