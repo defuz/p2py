@@ -21,8 +21,13 @@ def Stmt_Class(processor, node):
 @stdScope.registerTranslator
 def Stmt_ClassMethod(processor, node):
 	# FunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list)
-	args = [ast.Name('self', [])] + processor.process(node.params)
-	arguments = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[ast.Name('self', [])])
+	names, defaults = map(list,
+		zip(*(
+		(ast.Name(item.name, []), processor.process(item.default) if item.default else None) for item in node.params)
+		)
+	)
+	args = [ast.Name('self', [])] + names
+	arguments = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[None] + defaults)
 	body = processor.process(node.stmts)
 	return ast.FunctionDef(node.name, arguments, body, [])
 
@@ -51,6 +56,54 @@ def Expr_ClassConstFetch(processor, node):
 	if node['class'].parts[0] == 'self':
 		return ast.Name(node.name, [])
 	return ast.Attribute(processor.process(node['class']), node.name)
+
+@stdScope.registerTranslator
+def Expr_ConstFetch(processor, node):
+	return processor.process(node.name)
+
+@stdScope.registerTranslator
+def Expr_Variable(processor, node):
+	return ast.Name(node.name, [])
+
+@stdScope.registerTranslator
+def Expr_Assign(processor, node):
+	return ast.Assign([processor.process(node.var)], processor.process(node.expr))
+
+@stdScope.registerTranslator
+def Expr_Isset(processor, node):
+	# Compare(expr left, cmpop* ops, expr* comparators)
+	return ast.Compare(processor.process(node.vars[0]), [ast.IsNot()], [ast.Name('None', [])])
+
+@stdScope.registerTranslator
+def Expr_Ternary(processor, node):
+	# IfExp(expr test, expr body, expr orelse)
+	return ast.IfExp(processor.process(node.cond), processor.process(node['if']), processor.process(node['else']))
+
+@stdScope.registerTranslator
+def Expr_StaticPropertyFetch(processor, node):
+	# Attribute(expr value, identifier attr, expr_context ctx)
+	if node['class'].parts[0] == 'self':
+		return ast.Name(node.name, [])
+	return ast.Attribute(processor.process(node['class']), node.name, [])
+
+@stdScope.registerTranslator
+def Expr_ArrayDimFetch(processor, node):
+	# Subscript(expr value, slice slice, expr_context ctx)
+	return ast.Subscript(processor.process(node.var), processor.process(node.dim), [])
+
+@stdScope.registerTranslator
+def Arg(processor, node):
+	return processor.process(node.value)
+
+@stdScope.registerTranslator
+def Expr_FuncCall(processor, node):
+	return ast.Call(processor.process(node.name), processor.process(node.args), [], None, None)
+
+@stdScope.registerTranslator
+def Expr_StaticCall(processor, node):
+	if node['class'].parts[0] == 'self':
+		return ast.Name(node.name, [])
+	return ast.Call(ast.Attribute(processor.process(node['class']), node.name, []), processor.process(node.args), [], None, None)
 
 @stdScope.registerTranslator
 def Expr_Array(processor, node):
