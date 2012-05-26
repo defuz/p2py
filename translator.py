@@ -18,7 +18,7 @@ class PHPNode(Dict):
 					return '[...]'
 				return '[' + ', '.join(valueToStr(v, deep - 1) for v in value) + ']'
 			return str(value)
-		return valueToStr(self, 2)
+		return valueToStr(self, 3)
 
 def getPHPAst(file):
 	result = os.popen("php ast.php " + file).read()
@@ -36,6 +36,11 @@ class Scope(object):
 		self.translators[func.__name__] = func
 		return func
 
+	def registerClassTranslator(self, cls):
+		for method in cls.__dict__:
+			self.registerTranslator(method)
+		return cls
+
 	def defaultTranslator(self, processor, node):
 		return '# ' + str(node)
 
@@ -50,9 +55,9 @@ class Processor(object):
 		self.scope = scope
 
 	def process(self, node):
-		if isinstance(node, list):
+		if isinstance(node, (list, tuple)):
 			return [self.process(n) for n in node]
 		return self.scope.getTranslator(node)(self, node)
 
 	def translate(self, nodes):
-		return self.process(nodes[0])
+		return ast.Module(self.process(nodes))

@@ -5,7 +5,6 @@ from yaml import load_all as baseyaml
 from simplejson import loads as basejson, dumps as fromjson
 from cPickle import dumps as pickle, loads as frompickle
 from smartdict import Dict
-from codegen import to_source
 
 from utils import *
 
