@@ -378,6 +378,11 @@ def Stmt_For(processor, node):
 	return processor.process(node.init) + [loop] if node.init else loop
 
 @stdScope.registerTranslator
+def Stmt_While(processor, node):
+	# While(expr test, stmt* body, stmt* orelse)
+	return ast.While(processor.process(node.cond), processor.process(node.stmts), [])
+
+@stdScope.registerTranslator
 def Stmt_Break(processor, node):
 	if node.num and node.num > 1:
 		raise NotImplementedError("Couldn't break more than one statement")
