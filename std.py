@@ -25,7 +25,7 @@ def Stmt_ClassMethod(processor, node):
 		zip(*(
 		(ast.Name(item.name, []), processor.process(item.default) if item.default else None) for item in node.params)
 		)
-	)
+	) if node.params else ([], [])
 	args = [ast.Name('self', [])] + names
 	arguments = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[None] + defaults)
 	body = processor.process(node.stmts)
@@ -115,11 +115,9 @@ def Expr_Array(processor, node):
 	# Dict(expr* keys, expr* values)
 	# Name(identifier id, expr_context ctx)
 	keys, values = zip(*((item.key, item.value) for item in node.items))
-	return ast.Call(
-		ast.Name('OrderedDict', []),
-		[ast.Dict(processor.process(keys), processor.process(values))],
-		[], None, None
-	)
+	if not any(keys):
+		return ast.List(processor.process(values), [])
+	return ast.Dict(processor.process(keys), processor.process(values))
 
 @stdScope.registerTranslator
 def Stmt_PropertyProperty(processor, node):
