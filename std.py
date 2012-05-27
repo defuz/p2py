@@ -362,5 +362,15 @@ def Stmt_Switch(processor, node):
 	return [prepend] + ifs if prepend else ifs
 
 @stdScope.registerTranslator
+def Stmt_For(processor, node):
+	# While(expr test, stmt* body, stmt* orelse)
+	loop = ast.While(
+		processor.process(node.cond)[0] if node.cond else ast.Name('True', []),
+		processor.process(node.stmts) + processor.process(node.loop),
+		[]
+	)
+	return processor.process(node.init) + [loop] if node.init else loop
+
+@stdScope.registerTranslator
 def Stmt_Unset(processor, node):
 	return ast.Delete(processor.process(node.vars))
