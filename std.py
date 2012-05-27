@@ -74,6 +74,11 @@ def registerAugAssign(phpNodeName, pythonOp):
 	translator.__name__ = phpNodeName
 	stdScope.registerTranslator(translator)
 
+def registerAugAssignOp(phpNodeName, pythonOp):
+	def translator(processor, node):
+		return ast.AugAssign(processor.process(node.var), pythonOp(), ast.Num(1))
+	translator.__name__ = phpNodeName
+	stdScope.registerTranslator(translator)
 
 # arithmetic ops
 registerBinaryOp('Expr_Plus', ast.Add)
@@ -140,7 +145,10 @@ registerAugAssign('Expr_AssignBitwiseXor', ast.BitXor)
 registerAugAssign('Expr_AssignShiftLeft', ast.LShift)
 registerAugAssign('Expr_AssignShiftRight', ast.RShift)
 
-# todo: cope with Expr_PreInc, Expr_PreDec, Expr_PostInc, Expr_PostDec
+registerAugAssignOp('Expr_PreInc', ast.Add)
+registerAugAssignOp('Expr_PreDec', ast.Sub)
+registerAugAssignOp('Expr_PostInc', ast.Add)
+registerAugAssignOp('Expr_PostDec', ast.Sub)
 
 ####################
 # Expressions
