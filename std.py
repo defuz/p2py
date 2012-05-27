@@ -32,6 +32,16 @@ def Scalar_String(processor, node):
 	return ast.Str(node.value)
 
 @stdScope.registerTranslator
+def Scalar_LineConst(processor, node):
+	# inspect.currentframe().f_back.f_lineno
+	return ast.parse('inspect.currentframe().f_back.f_lineno')
+
+@stdScope.registerTranslator
+def Scalar_FuncConst(processor, node):
+	# inspect.currentframe().f_code.co_name
+	return ast.parse('inspect.currentframe().f_code.co_name')
+
+@stdScope.registerTranslator
 def Scalar_Encapsed(processor, node):
 	parts = [elem.replace('%', '%%') if isinstance(elem, basestring) else '%s' for elem in node.parts]
 	vars = [elem for elem in node.parts if not isinstance(elem, basestring)]
