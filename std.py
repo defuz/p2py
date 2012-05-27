@@ -171,12 +171,13 @@ def Stmt_Property(processor, node):
 def Expr_Empty(processor, node):
 	return ast.UnaryOp(ast.Not(), processor.process(node.var))
 
-##### Expr
-
 @stdScope.registerTranslator
 def Stmt_Echo(processor, node):
 	return ast.Print(None, processor.process(node.exprs), True)
 
+####################
+# Operators
+####################
 
 def registerBinaryOp(phpNodeName, pythonOp):
 	def translator(processor, node):
@@ -203,22 +204,38 @@ def registerCmpOp(phpNodeName, pythonOp):
 	translator.__name__ = phpNodeName
 	stdScope.registerTranslator(translator)
 
+def registerAugAssign(phpNodeName, pythonOp):
+	def translator(processor, node):
+		return ast.AugAssign(processor.process(node.var), pythonOp(), processor.process(node.expr))
+	translator.__name__ = phpNodeName
+	stdScope.registerTranslator(translator)
+
+
+# arithmetic ops
 registerBinaryOp('Expr_Plus', ast.Add)
 registerBinaryOp('Expr_Minus', ast.Sub)
 registerBinaryOp('Expr_Mul', ast.Mult)
 registerBinaryOp('Expr_Div', ast.Div)
 registerBinaryOp('Expr_Mod', ast.Mod)
-registerBinaryOp('Expr_ShiftLeft', ast.LShift)
-registerBinaryOp('Expr_ShiftRight', ast.RShift)
 
+# bitwise ops
 registerBinaryOp('Expr_BitwiseAnd', ast.BitAnd)
 registerBinaryOp('Expr_BitwiseOr', ast.BitOr)
 registerBinaryOp('Expr_BitwiseXor', ast.BitXor)
+# registerAugAssign('Expr_BitwiseNot', ) todo: implement
+registerBinaryOp('Expr_ShiftLeft', ast.LShift)
+registerBinaryOp('Expr_ShiftRight', ast.RShift)
 
+# string ops
 registerBinaryOp('Expr_Concat', ast.Add)
 
+# unary ops
 registerUnaryOp('Expr_UnaryPlus', ast.UAdd)
 registerUnaryOp('Expr_UnaryMinus', ast.USub)
+
+# boolean & logic ops
+registerBoolOp('Expr_BooleanAnd', ast.And)
+registerBoolOp('Expr_BooleanOr', ast.Or)
 
 @stdScope.registerTranslator
 def Expr_BooleanNot(processor, node):
@@ -227,13 +244,11 @@ def Expr_BooleanNot(processor, node):
 		return processor.process(node.expr.var)
 	return ast.UnaryOp(ast.Not(), processor.process(node.expr))
 
-registerBoolOp('Expr_BooleanAnd', ast.And)
-registerBoolOp('Expr_BooleanOr', ast.Or)
-
 registerBoolOp('Expr_LogicalAnd', ast.And)
 registerBoolOp('Expr_LogicalOr', ast.Or)
-registerBinaryOp('Expr_LogicalXor', ast.BitXor)
+registerBinaryOp('Expr_LogicalXor', ast.BitXor) # todo: fix this shit
 
+# comparison ops
 registerCmpOp('Expr_Equal', ast.Eq)
 registerCmpOp('Expr_NotEqual', ast.NotEq)
 registerCmpOp('Expr_Greater', ast.Gt)
@@ -243,25 +258,23 @@ registerCmpOp('Expr_SmallerOrEqual', ast.LtE)
 registerCmpOp('Expr_Identical', ast.Is)
 registerCmpOp('Expr_NotIdentical', ast.IsNot)
 
-def registerAugAssign(phpNodeName, pythonOp):
-	def translator(processor, node):
-		return ast.AugAssign(processor.process(node.var), pythonOp(), processor.process(node.expr))
-	translator.__name__ = phpNodeName
-	stdScope.registerTranslator(translator)
-	
+# string assign-ops
+registerAugAssign('Expr_AssignConcat', ast.Add)
+
+# arithmetic assign-ops
 registerAugAssign('Expr_AssignPlus', ast.Add)
 registerAugAssign('Expr_AssignMinus', ast.Sub)
 registerAugAssign('Expr_AssignMul', ast.Mult)
 registerAugAssign('Expr_AssignDiv', ast.Div)
 registerAugAssign('Expr_AssignMod', ast.Mod)
-registerAugAssign('Expr_AssignShiftLeft', ast.LShift)
-registerAugAssign('Expr_AssignShiftRight', ast.RShift)
 
+# bitwise assign-ops
 registerAugAssign('Expr_AssignBitwiseAnd', ast.BitAnd)
 registerAugAssign('Expr_AssignBitwiseOr', ast.BitOr)
 registerAugAssign('Expr_AssignBitwiseXor', ast.BitXor)
-
-registerAugAssign('Expr_AssignConcat', ast.Add)	
+# registerAugAssign('Expr_AssignBitwiseNot', ) todo: implement
+registerAugAssign('Expr_AssignShiftLeft', ast.LShift)
+registerAugAssign('Expr_AssignShiftRight', ast.RShift)
 
 @stdScope.registerTranslator
 def Stmt_If(processor, node):
