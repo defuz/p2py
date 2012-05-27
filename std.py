@@ -236,6 +236,11 @@ def Expr_Array(processor, node):
 def Expr_Empty(processor, node):
 	return ast.UnaryOp(ast.Not(), processor.process(node.var))
 
+@stdScope.registerTranslator
+def Expr_New(processor, node):
+	# Call(expr func, expr* args, keyword* keywords,expr? starargs, expr? kwargs)
+	return ast.Call(processor.process(node['class']), processor.process(node.args), [], None, None)
+
 #### casts ####
 
 @stdScope.registerTranslator
@@ -377,6 +382,11 @@ def Stmt_Break(processor, node):
 	if node.num and node.num > 1:
 		raise NotImplementedError("Couldn't break more than one statement")
 	return ast.Break()
+
+@stdScope.registerTranslator
+def Stmt_Throw(processor, node):
+	# Raise(expr? type, expr? inst, expr? tback)
+	return ast.Raise(processor.process(node.expr), None, None)
 
 @stdScope.registerTranslator
 def Stmt_Unset(processor, node):

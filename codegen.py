@@ -359,9 +359,8 @@ class SourceGenerator(NodeVisitor):
 	def visit_Raise(self, node):
 		# XXX: Python 2.6 / 3.0 compatibility
 		self.newline(node)
-		self.write('raise')
+		self.write('raise ')
 		if hasattr(node, 'exc') and node.exc is not None:
-			self.write(' ')
 			self.visit(node.exc)
 			if node.cause is not None:
 				self.write(' from ')
