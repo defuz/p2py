@@ -409,7 +409,10 @@ class SourceGenerator(NodeVisitor):
 		self.write(node.id)
 
 	def visit_Str(self, node):
-		self.write(repr(node.s))
+		s = repr(node.s)
+		if '\\n' in s:
+			s = '"""%s"""' % s[2:-1].replace('\\n', '\n')
+		self.write(s)
 
 	def visit_Bytes(self, node):
 		self.write(repr(node.s))

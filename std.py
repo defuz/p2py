@@ -46,6 +46,12 @@ def Scalar_String(processor, node):
 	return ast.Str(node.value)
 
 @stdScope.registerTranslator
+def Scalar_Encapsed(processor, node):
+	parts = [elem for elem in node.parts if isinstance(elem, basestring)]
+	elems = [elem for elem in node.parts if not isinstance(elem, basestring)]
+	return ast.BinOp(ast.Str('%s'.join(parts)), ast.Mod(), ast.Tuple(processor.process(elems), []))
+
+@stdScope.registerTranslator
 def Const(processor, node):
 	# Assign(expr* targets, expr value)
 	# Name(identifier id, expr_context ctx)
@@ -59,7 +65,11 @@ def Stmt_ClassConst(processor, node):
 def Expr_ClassConstFetch(processor, node):
 	if node['class'].parts[0] == 'self':
 		return ast.Name(node.name, [])
-	return ast.Attribute(processor.process(node['class']), node.name)
+	return ast.Attribute(processor.process(node['class']), node.name, [])
+
+@stdScope.registerTranslator
+def Expr_PropertyFetch(processor, node):
+	return ast.Attribute(processor.process(node.var), node.name, [])
 
 @stdScope.registerTranslator
 def Expr_ConstFetch(processor, node):
@@ -104,6 +114,10 @@ def Expr_FuncCall(processor, node):
 	return ast.Call(processor.process(node.name), processor.process(node.args), [], None, None)
 
 @stdScope.registerTranslator
+def Expr_MethodCall(processor, node):
+	return ast.Call(ast.Attribute(processor.process(node.var), node.name, []), processor.process(node.args), [], None, None)
+
+@stdScope.registerTranslator
 def Expr_StaticCall(processor, node):
 	if node['class'].parts[0] == 'self':
 		return ast.Call(ast.Name(node.name, []), processor.process(node.args), [], None, None)
@@ -128,6 +142,12 @@ def Stmt_PropertyProperty(processor, node):
 @stdScope.registerTranslator
 def Stmt_Property(processor, node):
 	return processor.process(node.props)[0]
+
+@stdScope.registerTranslator
+def Expr_Empty(processor, node): # todo: fix no empty
+	return ast.UnaryOp(ast.Not(), processor.process(node.var))
+
+
 
 
 ##### Expr
