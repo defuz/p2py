@@ -47,10 +47,10 @@ def Scalar_String(processor, node):
 
 @stdScope.registerTranslator
 def Scalar_Encapsed(processor, node):
-	parts = [elem.replace('%', '%%') for elem in node.parts if isinstance(elem, basestring)]
-	elems = [elem for elem in node.parts if not isinstance(elem, basestring)]
-	params = ast.Tuple(processor.process(elems), []) if len(elems) > 1 else processor.process(elems[0])
-	return ast.BinOp(ast.Str('%s'.join(parts)), ast.Mod(), params)
+	parts = [elem.replace('%', '%%') if isinstance(elem, basestring) else '%s' for elem in node.parts]
+	vars = [elem for elem in node.parts if not isinstance(elem, basestring)]
+	params = ast.Tuple(processor.process(vars), []) if len(vars) > 1 else processor.process(vars[0])
+	return ast.BinOp(ast.Str(''.join(parts)), ast.Mod(), params)
 
 @stdScope.registerTranslator
 def Const(processor, node):
@@ -70,6 +70,8 @@ def Expr_ClassConstFetch(processor, node):
 
 @stdScope.registerTranslator
 def Expr_PropertyFetch(processor, node):
+	if not isinstance(node.name, basestring): # todo!
+		node.name = '$$$'
 	return ast.Attribute(processor.process(node.var), node.name, [])
 
 @stdScope.registerTranslator
@@ -140,13 +142,23 @@ def Expr_Array(processor, node):
 	keys, values = zip(*((item.key, item.value) for item in node.items)) if node.items else ([], [])
 	if not any(keys):
 		return ast.List(processor.process(values), [])
-	return ast.Dict(processor.process(keys), processor.process(values))
+	if not all(keys):
+		from itertools import count
+		c = count()
+		keys = [processor.process(i) if i else ast.Num(c.next()) for i in keys]
+	else:
+		keys = processor.process(keys)
+	return ast.Dict(keys, processor.process(values))
 
 @stdScope.registerTranslator
 def Stmt_PropertyProperty(processor, node):
 	# Assign(expr* targets, expr value)
 	# Name(identifier id, expr_context ctx)
-	return ast.Assign([ast.Name(node.name, [])], processor.process(node.default))
+	# xxx: class property without default value
+	if node.default:
+		return ast.Assign([ast.Name(node.name, [])], processor.process(node.default))
+	else:
+		return str('# ' + node.name)
 
 @stdScope.registerTranslator
 def Stmt_Property(processor, node):

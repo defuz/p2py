@@ -1,316 +1,330 @@
 <?php
+/**
+ * Не бойся, это всего лишь php внутри php.
+ */
 
-abstract class CommandBuilderBase extends LCachableComponent {
+require_once('utils.php');
 
-    protected abstract function getMainTable();
+class SearchCodeGenerator extends CodeGenerator {
 
-    protected abstract function getTablePrefix();
+    /** @var SearchBase */
+    protected $search;
+    /** @var ReflectionClass */
+    protected $reflector;
+    protected $meta;
+    protected $specificMethods = array();
 
-    protected abstract function getSelect();
-
-    protected abstract function getFrom();
-
-    protected abstract function getMicrodistrictCondition($microdistricts);
-
-    protected abstract function getSubwayCondition($subwayStations, $distance);
-
-    protected function getIndexes() {
-        return '';
+    protected function one($value) {
+        return "(is_array($value) ? (empty($value) ? null : array_shift($value)) : $value)";
     }
 
-    protected function getSelectPrefix() {
-        return isset($_GET['nocache']) ? 'SELECT SQL_NO_CACHE' : 'SELECT ';
+    protected function many($value) {
+        return "(is_array($value) ? $value : (empty($value) ? array() : array($value)))";
     }
 
-    public function limitPrice($parameters) {
-        if (isset($parameters['city'])
-         && isset($parameters['realtyType'])
-         && isset($parameters['contractType'])) {
-
-            $prices = City::factory()->findById($parameters['city'])->getPriceLimit($parameters['contractType'], $parameters['realtyType']);
-            if ((!isset($parameters['priceMin']) || empty($parameters['priceMin'])) && isset($prices['priceMin'])) {
-                $parameters['currencyMin'] = $prices['currency'];
-                $parameters['priceMin'] = $prices['priceMin'];
-            }
-            if ((!isset($parameters['priceMax']) || empty($parameters['priceMax'])) && isset($prices['priceMax'])) {
-                $parameters['currencyMax'] = $prices['currency'];
-                $parameters['priceMax'] = $prices['priceMax'];
-            }
-        }
-        if (isset($parameters['currency'])) {
-            if (!isset($parameters['currencyMin']))
-                $parameters['currencyMin'] = $parameters['currency'];
-            if (!isset($parameters['currencyMax']))
-                $parameters['currencyMax'] = $parameters['currency'];
-            unset($parameters['currency']);
-        }
-        return $parameters;
+    protected function is_instance($obj, $class) {
+        return "(!is_string($obj) && is_a($obj, '$class'))";
     }
 
-    public function constructSelectSql($parameters, $view = null) {
-        $this->parameters = $parameters;
-        $sql = "{$this->selectPrefix} {$this->select},
-                       a_locations.latitude, a_locations.longitude";
-        if (!empty($view)) {
-            $sql.= ', a_view_cache.data as view';
+    protected function constructGetter($name, $property) {
+        $methodName = 'get' . ucwords($name);
+        if (isset($this->specificMethods[$methodName])) {
+            $this->insertMethodCode($this->specificMethods[$methodName]);
+            unset($this->specificMethods[$methodName]);
+            return;
         }
-        $sql .= ' ' . $this->from;
-        if (!empty($parameters['phone']))
-            $sql .= " INNER JOIN {$this->tablePrefix}_phones ON {$this->tablePrefix}_phones.group_id = a_p.group_id AND {$this->tablePrefix}_phones.phone = '8" . $parameters['phone'] . "' ";
-        if (!empty($parameters['sites']))
-            $sql .= " INNER JOIN {$this->tablePrefix}_urls ON a_p.group_id = {$this->tablePrefix}_urls.group_id AND {$this->tablePrefix}_urls.site = " . implode(', ', $parameters['sites']) . ' ';
-        elseif (!empty($parameters['block']))
-            $sql .= " LEFT JOIN {$this->tablePrefix}_urls ON a_p.group_id = {$this->tablePrefix}_urls.group_id AND {$this->tablePrefix}_urls.site IN (" . implode(', ', $parameters['block']) . ') ';
-        if (isset($parameters['building'])) {
-            $sql .= ' INNER JOIN n_street ON n_street.street_id = a_p.street AND n_street.house = a_p.house
-                      INNER JOIN n_building ON n_street.n_id = n_building.n_id AND n_building.n_id = ' . $parameters['building'] . ' ';
+        if (isset($property['getter'])) {
+            $this->open("protected function $methodName()");
+            $this->line("return {$property['getter']};");
+            $this->close();
+            $this->line();
         }
-        if (!empty($view)) {
-            $sql .= ' LEFT JOIN a_view_cache ON a_view_cache.group_id = a_p.group_id AND a_view_cache.view = "' . $view . '" ';
-        }
-        if (isset($parameters['contractType']) && $parameters['contractType'] == CONTRACT_TYPE_DAILY_RENT) {
-            $sql .= ' LEFT JOIN a_daily_featured ON a_daily_featured.group_id = a_p.group_id ';
-            $sql .= ' LEFT JOIN a_daily_hidden ON a_daily_hidden.group_id = a_p.group_id ';
-        }
-        $sql .= " LEFT JOIN a_locations ON a_locations.id = a_p.location_id {$this->constructWhere($parameters)}{$this->constructOrder($parameters)}";
-        return $sql;
     }
 
-    public function constructCountSql($parameters, $limit = null) {
-        $this->parameters = $parameters;
-        if (!empty($parameters['phone'])) {
-            $phone_table = $this->tablePrefix . '_phones';
-            $sql = "{$this->selectPrefix} COUNT({$phone_table}.group_id) AS count FROM {$phone_table} WHERE {$phone_table}.phone = '8{$parameters['phone']}'";
-        } else {
-            $sql = "{$this->selectPrefix} COUNT(*) AS count FROM {$this->mainTable} LEFT JOIN a_locations ON a_locations.id = a_p.location_id";
-
-            if (isset($parameters['building'])) {
-                $sql .= " INNER JOIN n_street ON n_street.street_id = a_p.street AND n_street.house = a_p.house
-                          INNER JOIN n_building ON n_street.n_id = n_building.n_id AND n_building.n_id = " . $parameters['building'] . ' ';
-            }
-
-            if (!empty($parameters['sites']))
-                $sql .= " INNER JOIN {$this->tablePrefix}_urls ON a_p.group_id = {$this->tablePrefix}_urls.group_id AND {$this->tablePrefix}_urls.site = " . implode(', ', $parameters['sites']) . ' ';
-            elseif (!empty($parameters['block']))
-                $sql .= " LEFT JOIN {$this->tablePrefix}_urls ON a_p.group_id = {$this->tablePrefix}_urls.group_id AND {$this->tablePrefix}_urls.site IN (" . implode(', ', $parameters['block']) . ') ';
-
-            if (isset($parameters['contractType']) && $parameters['contractType'] == CONTRACT_TYPE_DAILY_RENT) {
-                $sql .= ' LEFT JOIN a_daily_hidden ON a_daily_hidden.group_id = a_p.group_id ';
-            }
-            $sql .= $this->constructWhere($parameters);
-        }
-        if ($limit != null)
-            $sql .= ' LIMIT ' . $limit;
-        return $sql;
+    protected function hasGetter($name) {
+        return isset($this->specificMethods['get' . ucwords($name)]) || isset($this->meta[$name]['getter']);
     }
 
-    static $INTERVALS = array(
-        'today' => 'INTERVAL  0 DAY',
-        'yesterday' => 'INTERVAL  1 DAY',
-        '3days' => 'INTERVAL  3 DAY',
-        'week' => 'INTERVAL  7 DAY',
-        '2weeks' => 'INTERVAL 14 DAY',
-        'month' => 'INTERVAL  1 MONTH',
-        '6months' => 'INTERVAL  6 MONTH',
-    );
-
-    static $CURRENCIES = array(
-        CURRENCY_USD => 'usd',
-        CURRENCY_UAH => 'uah',
-        CURRENCY_EUR => 'eur',
-    );
-
-    protected function constructWhere($parameters, $filter_by_time = true) {
-        $where = array();
-        // groupId
-        if (isset($parameters['groupId']))
-            $where = array('a_p.group_id = ' . $parameters['groupId']);
-        else {
-            if ($filter_by_time) {
-                // times
-                if (isset($parameters['addTime'])) {
-                    $value = $parameters['addTime'];
-                    if (is_numeric($value))
-                        $where[] = 'a_p.add_time >= "' . date('c', $value) . '"';
-                    elseif ($value != 'all')
-                        $where[] = 'a_p.add_time >= CURDATE() - ' . self::$INTERVALS[$value];
-                    if (isset($parameters['addTimeDown']))
-                        $where[] = 'a_p.add_time <= "' . date('c', $parameters['addTimeDown']) . '"';
-                }
-                elseif (isset($parameters['updateTime'])) {
-                    $value = $parameters['updateTime'];
-                    if (is_numeric($value))
-                        $where[] = 'a_p.update_time >= "' . date('c', $value) . '"';
-                    elseif ($value != 'all')
-                        $where[] = 'a_p.update_time >= CURDATE() - ' . self::$INTERVALS[$value];
-                }
-            }
-            // contract type
-            if (isset($parameters['contractType']))
-                $where[] = 'a_p.contract_type = ' . $parameters['contractType'];
-
-            // realty type
-            if (isset($parameters['realtyType']))
-                $where[] = 'a_p.realty_type = ' . $parameters['realtyType'];
-
-            // city
-            if (isset($parameters['city']))
-                $where[] = 'a_p.city = ' . $parameters['city'];
-
-            if (isset($parameters['street'])) {
-                // street
-                $value = $parameters['street'];
-                $where[] = '(a_p.street IN (' . implode(',', $value) . ') OR a_p.supstreet IN (' . implode(',', $value) . '))';
-                // house
-                if (isset($parameters['house']))
-                    $where[] = 'a_p.house = "' . $parameters['house'] . '"';
+    protected function constructSetter($name, $property) {
+        $methodName = 'set' . ucwords($name);
+        if (isset($this->specificMethods[$methodName])) {
+            $this->insertMethodCode($this->specificMethods[$methodName]);
+            unset($this->specificMethods[$methodName]);
+            return;
+        }
+        if (in_array('virtual', $property))
+            return;
+        $this->open("public function $methodName(\$value)");
+        if (isset($property['setter']))
+            $setter = $property['setter'];
+        elseif (isset($property['model'])) {
+            $model = $property['model'];
+            $setter = "{$this->is_instance('$value', $model)} ? \$value : {$model}::factory()->findById(\$value)";
+        }
+        if (isset($property['many'])) {
+            $this->line("\$this->$name = array();");
+            $this->line("\$values = {$this->many('$value')};");
+            $this->open("foreach(\$values as \$value)");
+            if (isset($setter))
+                $this->line("\$value = $setter;");
+            if ($property['many'] == 'unique') {
+                $this->open("if (isset(\$value) && !in_array(\$value, \$this->$name))");
+                $this->line("\$this->{$name}[] = \$value;");
+                $this->close();
             } else {
+                $this->open("if (isset(\$value))");
+                $this->line("\$this->{$name}[] = \$value;");
+                $this->close();
+            }
+            $this->close();
+        } else {
+            if (!isset($setter))
+                $setter = '$value';
+            $this->line("\$this->$name = $setter;");
+        }
+        $this->constructRelation($name);
+        $this->close();
+        $this->line();
 
-                if (isset($parameters['subway'])) {
-                    $where[] = $this->getSubwayCondition($parameters['subway'], $parameters['distance']);
-                } else {
-                    $location = array();
-                    // [micro]disctircts
-                    if (isset($parameters['district'])) {
-                        $value = $parameters['district'];
-                        $location[] = is_array($value)
-                                ? 'a_p.district IN (' . implode(',', $value) . ')'
-                                : 'a_p.district = ' . $value;
-                    }
-                    if (isset($parameters['microdistrict'])) {
-                        $location[] = $this->getMicrodistrictCondition($parameters['microdistrict']);
-                    }
+    }
 
-                    if ($location)
-                        $where[] = '(' . implode(' OR ', $location) . ')';
+    protected $defaults = array();
+    protected $relations = array();
+    protected $exclusions = array();
+    protected $relationStack = array();
+
+    protected function constructRelation($name) {
+        if (!isset($this->exclusions[$name]) && !isset($this->relations[$name]))
+            return;
+        $this->comment('unset relation properties');
+        $this->deepRelation($name);
+        if (isset($this->exclusions[$name])) {
+            foreach ($this->exclusions[$name] as $relation) {
+                $this->line("\$this->$relation = {$this->defaults[$relation]};");
+                $this->deepRelation($relation);
+            }
+        }
+    }
+
+    protected function deepRelation($name) {
+        if (!in_array($name, $this->relationStack)) {
+            $this->relationStack[] = $name;
+            if (isset($this->relations[$name]))
+                foreach ($this->relations[$name] as $relation)
+                    if (!in_array($relation, $this->relationStack)) {
+                        $this->line("\$this->$relation = {$this->defaults[$relation]};");
+                        $this->deepRelation($relation);
+                    }
+        }
+    }
+
+    protected function compileRelations() {
+        foreach ($this->search->relations() as $key => $value)
+            if (is_int($key)) { // отношения взаимоисключения
+                foreach ($value as $lefts)
+                    foreach ($value as $rights)
+                        if ($lefts !== $rights)
+                            $this->addRelations('exclusions', $lefts, $rights);
+            } else // отношения зависимости
+                $this->addRelations('relations', $key, $value);
+    }
+
+    protected function addRelations($type, $lefts, $rights) {
+        $array = $this->$type;
+        foreach (many($lefts) as $to) {
+            if (!isset($array[$to]))
+                $array[$to] = array();
+            foreach (many($rights) as $from)
+                if (!in_array($from, $array[$to]))
+                    array_push($array[$to], $from);
+        }
+        $this->$type = $array;
+    }
+
+    protected function constructDocs() {
+        $this->line('/**');
+        foreach ($this->meta as $name => $property) {
+            if (isset($property['type']))
+                $type = $property['type'];
+            elseif (isset($property['many']))
+                $type = 'array';
+            elseif (isset($property['model']))
+                $type = $property['model'];
+            else
+                $type = 'string';
+            $this->line(" * @property $type \$$name");
+        }
+        $this->line(' * @property array $properties');
+        $this->line(' * @property array $propertiesAsId');
+        $this->line(' */');
+    }
+
+    protected $rules = array();
+
+    protected function compileRules() {
+        foreach ($this->search->rules() as $message => $rule) {
+            $scenarios = isset($rule['scenario']) ? explode(',', $rule['scenario']) : array(null);
+            foreach ($scenarios as $scenario)
+                if (!isset($this->rules[$scenario]))
+                    $this->rules[$scenario] = array();
+            unset($rule['scenario']);
+            foreach ($rule as $precondition => $condition) {
+                if (!is_int($precondition))
+                    $condition = "($precondition) && !($condition)";
+                else
+                    $condition = "!($condition)";
+                foreach ($scenarios as $scenario)
+                    $this->rules[$scenario][] = array($message, $condition);
+            }
+        }
+    }
+
+    protected function addRule($rule) {
+        $message = $rule[0]; $condition = $rule[1];
+        $this->open("if ($condition)");
+            $this->line("return '$message';");
+        $this->close();
+    }
+
+    protected function constructRules() {
+        $this->open('public function getError($scenario = null)');
+        if (isset($this->rules[null])) {
+            foreach ($this->rules[null] as $rule)
+                $this->addRule($rule);
+        }
+        foreach ($this->rules as $scenario => $rules)
+            if (!empty($scenario)) {
+                $this->open("if (\$scenario == '$scenario')");
+                    foreach ($rules as $rule)
+                        $this->addRule($rule);
+                    $this->line('return null;');
+                $this->close();
+            }
+            $this->line('return null;');
+        $this->close();
+    }
+
+    protected function constructUnsetPrivate() {
+        $this->open('protected function unsetPrivateProperty()');
+        foreach ($this->meta as $name => $property)
+            if (in_array('private', $property))
+                $this->line("\$this->$name = {$this->defaults[$name]};");
+        $this->close();
+    }
+
+    protected function constructGetProperties() {
+        $this->open("protected function getProperties()");
+        $this->line('$properties = get_object_vars($this);');
+        foreach ($this->meta as $name => $property)
+            if (!in_array('virtual', $property)) {
+                $methodName = 'get' . ucwords($name);
+                if (isset($this->specificMethods[$methodName])) {
+                    $this->line("\$properties['$name'] = \$this->$methodName();");
                 }
             }
-
-//            if (isset($parameters['building'])) {
-//                $where[] = 'a_p.building_id = ' . $parameters['building'] . ' ';
-//            }
-
-
-            // room count
-            if (isset($parameters['roomCount']))
-            {
-                if ( !is_array( $parameters['roomCount'] ) )
-                    $parameters['roomCount'] = array( $parameters['roomCount'] );
-                $room = array();
-                if ( in_array( '5', $parameters['roomCount'] ) )
-                    $room[] = 'a_p.room_count > 5';
-
-                $room[] = 'a_p.room_count IN (' . implode(',', $parameters['roomCount']) . ')';
-
-                $where[] = '((' . implode( ') OR (', $room ) . '))';
-            }
-
-            // general Area
-            if (isset($parameters['generalAreaMin']))
-                $where[] = 'a_p.area_total >= ' . $parameters['generalAreaMin'];
-            if (isset($parameters['generalAreaMax']))
-                $where[] = 'a_p.area_total <= ' . $parameters['generalAreaMax'];
-
-            // price
-            if (isset($parameters['priceMin'])) {
-                $currency_field = 'a_p.price_' . self::$CURRENCIES[$parameters['currencyMin']];
-                $where[] = $currency_field . ' >= ' . $parameters['priceMin'];
-            }
-            if (isset($parameters['priceMax'])) {
-                $currency_field = 'a_p.price_' . self::$CURRENCIES[$parameters['currencyMax']];
-                $where[] = $currency_field . ' <= ' . $parameters['priceMax'];
-            }
-
-//            // envelope
-//            if (isset($parameters['envelopeMinLat'])) {
-//                $locations = Yii::app()->db->createCommand("SELECT id FROM a_locations
-//                  WHERE a_locations.latitude  >= {$parameters['envelopeMinLat']}
-//                    AND a_locations.latitude  <= {$parameters['envelopeMaxLat']}
-//                    AND a_locations.longitude >= {$parameters['envelopeMinLng']}
-//                    AND a_locations.longitude <= {$parameters['envelopeMaxLng']}
-//                ")->queryColumn();
-//                    $where[] = 'a_p.location_id IN ("' . implode('", "', $locations) . '")';
-//            }
-
-            // envelope
-            if (isset($parameters['envelopeMinLat'])) {
-                $where[] = "a_locations.latitude  >= {$parameters['envelopeMinLat']}
-                        AND a_locations.latitude  <= {$parameters['envelopeMaxLat']}
-                        AND a_locations.longitude >= {$parameters['envelopeMinLng']}
-                        AND a_locations.longitude <= {$parameters['envelopeMaxLng']}";
-            }
-
-            // publisherId
-            if (isset($parameters['publisher']))
-                $where[] = 'a_p.publisher_id = ' . $parameters['publisher'];
-
-            // checkboxes
-            $without = array();
-
-            if (!empty($parameters['withoutBrokers']))
-                $without[] = 'a_p.publisher_id IN (' . PUBLISHER_OWNER . ', ' . PUBLISHER_PRESUMABLY_OWNER . ')';
-            if (!empty($parameters['withoutFee']))
-                $without[] = 'a_p.without_fee = "1"';
-
-            if (!empty($without)) {
-                $where[] = '(' . implode(' OR ', $without) . ')';
-            }
-
-            if (isset($parameters['newBuilding']) && $parameters['newBuilding'])
-                $where[] = 'a_p.is_new_house = 1';
-            if (isset($parameters['nearMetro']) && $parameters['nearMetro']) {
-                $where[] = "EXISTS (SELECT * FROM a_locations_to_subway USE INDEX (near_metro) WHERE distance < 1000 AND a_p.location_id = a_locations_to_subway.location_id)";
-            }
-            if (isset($parameters['hasPhotos']))
-                $where[] = 'a_p.has_images = 1';
-            if (isset($parameters['premium']) && $parameters['premium'] == '1')
-                $where[] = 'a_p.premium > 0';
-
-            // block site
-            if (!empty($parameters['block']))
-                $where[] = $this->tablePrefix . '_urls.group_id IS NULL';
-
-            if (isset($parameters['contractType']) && $parameters['contractType'] == CONTRACT_TYPE_DAILY_RENT) {
-                $where[] = 'a_daily_hidden.group_id is NULL';
-            }
-
-            //with this price for squre meter can be calculated
-            if ((isset($parameters['order'])) && (in_array('price-sqm', $parameters['order']))) {
-                $where[] = "a_p.area_total > 0";
-            }
-
-        }
-        if (empty($where))
-            return '';
-
-        return ' WHERE ' . implode(' AND ', $where);
+        $this->line('return array_filter($properties);');
+        $this->close();
     }
 
-    protected static $ORDERS = array(
-        'rank' => 'a_p.rank DESC',
-        'district' => 'a_p.district ASC',
-        'street' => 'a_p.street ASC',
-        'price' => 'a_p.price_usd ASC',
-        'price-sqm' => 'a_p.price_sqm_usd ASC',
-        'add-time' => 'a_p.add_time DESC',
-        'update-time' => 'a_p.update_time DESC',
-        'update-date' => 'DATE(a_p.update_time) DESC',
-        'update-month' => 'ROUND((UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(update_time)) / 2592000) ASC',
-        'premium' => 'a_p.premium DESC',
-        'premium2' => 'premium2 DESC',
-        'has-images' => 'a_p.has_images = 1 DESC'
-    );
-
-    protected function constructOrder($parameters) {
-        if (isset($parameters['order']) && !empty($parameters['order'])) {
-            $orders = array();
-            foreach ($parameters['order'] as $order)
-                $orders[] = self::$ORDERS[$order];
-            return ' ORDER BY ' . join(', ', $orders);
-        }
-        return '';
+    protected function constructGetPropertiesAsId() {
+        $this->open("protected function getPropertiesAsId()");
+        $this->line('$properties = $this->properties;');
+        foreach ($this->meta as $name => $property)
+            if (!in_array('virtual', $property) && (isset($property['model']) || isset($property['key']))) {
+                $key = isset($property['key']) ? $property['key'] : $name;
+                $this->open("if (isset(\$properties['$name']))");
+                if (isset($property['model'])) {
+                    if (isset($property['many'])) {
+                        $ids = $name != $key ? "\$properties['$key']" : '$ids';
+                        $this->line("$ids = array();");
+                        $this->open("foreach (\$properties['$name'] as \$model)");
+                        $this->line("{$ids}[] = \$model->idValue;");
+                        $this->close();
+                        if ($name == $key)
+                            $this->line("\$properties['$key'] = \$ids;");
+                    } else {
+                        $this->line("\$properties['$key'] = \$properties['$name']->idValue;");
+                    }
+                } else {
+                    $this->line("\$properties['$key'] = \$properties['$name'];");
+                }
+                if ($name != $key)
+                    $this->line("unset(\$properties['$name']);");
+                $this->close();
+            }
+        $this->line('return $properties;');
+        $this->close();
     }
 
+    protected function constructPriorities() {
+        $this->line('protected static $priorities = array('); $this->tab();
+        $i = 0;
+        foreach ($this->meta as $name => $property) {
+            $i++;
+            $this->line("'$name' => $i,");
+        }
+        $this->untab(); $this->line(');');
+    }
+
+    protected function generate() {
+        $this->search = new SearchBase();
+        $this->reflector = new ReflectionClass(get_class($this->search));
+        $this->meta = $this->search->properties();
+        $this->compileRelations();
+        foreach ($this->reflector->getMethods(ReflectionMethod::IS_FINAL) as $method)
+            $this->specificMethods[$method->getName()] = $method;
+        $this->command('<?php');
+        $this->comment("\n\tАХТУНГ! АЛАРМ! ปลุก!\n\tЭтот файл сгенерирован автоматически, потому тебе не стоит вручную его изменять.\n\tНо если все же очень хочется, попробуй настроить правильно SearchBase и выполнить комманду `php console.php research`.\n\tСкорее всего это именно то, что тебе на самом деле нужно. Good luck!\n");
+        $this->line("require_once('utils.php');");
+        $this->constructDocs();
+        $this->open('class Search extends LComponent');
+            $this->line();
+            foreach ($this->meta as $name => $property)
+                if (!in_array('virtual', $property)) {
+                    if (isset($property['default'])) {
+                        $this->defaults[$name] = $property['default'];
+                    } else {
+                        $this->defaults[$name] = isset($property['many']) ? 'array()' : 'null';
+                    }
+                    $modifier = $this->hasGetter($name) ? 'private' : 'public';
+                    $this->line("$modifier \$$name = {$this->defaults[$name]};");
+                }
+            $this->line();
+            $this->constructGetProperties();
+            $this->line();
+            $this->constructGetPropertiesAsId();
+            $this->line();
+            $this->constructPriorities();
+            $this->line();
+            foreach ($this->meta as $name => $property) {
+                $this->comment("$name property");
+                $this->line();
+                $this->constructGetter($name, $property);
+                $this->constructSetter($name, $property);
+            }
+            $this->constructUnsetPrivate(); $this->line();
+            $this->comment("specific methods"); $this->line();
+            foreach ($this->specificMethods as $method)
+                $this->insertMethodCode($method);
+            $this->compileRules();
+            $this->constructRules(); $this->line();
+        $this->close();
+    }
+
+    protected function insertMethodCode($method) {
+        $start = $method->getStartLine();
+        $end = $method->getEndLine();
+        $inputFile = fopen(__DIR__ . '/SearchBase.php', 'r');
+        for ($i = 0; $i < $start - 1; $i++)
+            fgets($inputFile);
+        $this->command(PHP_EOL);
+        for ($i = $start; $i <= $end; $i++)
+            $this->command(fgets($inputFile));
+        fclose($inputFile);
+    }
+
+    protected function getOutputFileName() {
+        return 'search/Search';
+    }
 }
-
 ?>
