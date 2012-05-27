@@ -164,7 +164,6 @@ def registerCmpOp(phpNodeName, pythonOp):
 	translator.__name__ = phpNodeName
 	stdScope.registerTranslator(translator)
 
-
 registerBinaryOp('Expr_Plus', ast.Add)
 registerBinaryOp('Expr_Minus', ast.Sub)
 registerBinaryOp('Expr_Mul', ast.Mult)
@@ -198,6 +197,25 @@ registerCmpOp('Expr_SmallerOrEqual', ast.LtE)
 registerCmpOp('Expr_Identical', ast.Is)
 registerCmpOp('Expr_NotIdentical', ast.IsNot)
 
+def registerAugAssign(phpNodeName, pythonOp):
+	def translator(processor, node):
+		return ast.AugAssign(processor.process(node.var), pythonOp(), processor.process(node.expr))
+	translator.__name__ = phpNodeName
+	stdScope.registerTranslator(translator)
+	
+registerAugAssign('Expr_AssignPlus', ast.Add)
+registerAugAssign('Expr_AssignMinus', ast.Sub)
+registerAugAssign('Expr_AssignMul', ast.Mult)
+registerAugAssign('Expr_AssignDiv', ast.Div)
+registerAugAssign('Expr_AssignMod', ast.Mod)
+registerAugAssign('Expr_AssignShiftLeft', ast.LShift)
+registerAugAssign('Expr_AssignShiftRight', ast.RShift)
+
+registerAugAssign('Expr_AssignBitwiseAnd', ast.BitAnd)
+registerAugAssign('Expr_AssignBitwiseOr', ast.BitOr)
+registerAugAssign('Expr_AssignBitwiseXor', ast.BitXor)
+
+registerAugAssign('Expr_AssignConcat', ast.Add)	
 
 @stdScope.registerTranslator
 def Stmt_If(processor, node):
