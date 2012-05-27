@@ -22,6 +22,11 @@ def Scalar_LNumber(processor, node):
 	return ast.Num(node.value)
 
 @stdScope.registerTranslator
+def Scalar_DNumber(processor, node):
+	# Num(object n)
+	return ast.Num(float(node.value))
+
+@stdScope.registerTranslator
 def Scalar_String(processor, node):
 	# Str(string s)
 	return ast.Str(node.value)
@@ -255,6 +260,11 @@ def Expr_New(processor, node):
 	# Call(expr func, expr* args, keyword* keywords,expr? starargs, expr? kwargs)
 	return ast.Call(processor.process(node['class']), processor.process(node.args), [], None, None)
 
+@stdScope.registerTranslator
+def Expr_Instanceof(processor, node):
+	# Call(expr func, expr* args, keyword* keywords,expr? starargs, expr? kwargs)
+	return ast.Call(ast.Name('isinstance', []), [processor.process(node.expr)] + [processor.process(node['class'])], [], None, None)
+
 #### casts ####
 
 @stdScope.registerTranslator
@@ -397,10 +407,24 @@ def Stmt_While(processor, node):
 	return ast.While(processor.process(node.cond), processor.process(node.stmts), [])
 
 @stdScope.registerTranslator
+def Stmt_Do(processor, node):
+	# While(expr test, stmt* body, stmt* orelse)
+	# If(expr test, stmt* body, stmt* orelse)
+	return ast.While(ast.Name('True', []), processor.process(node.stmts) + [ast.If(
+		ast.UnaryOp(ast.Not(), processor.process(node.cond)), [ast.Break()], []
+	)], [])
+
+@stdScope.registerTranslator
 def Stmt_Break(processor, node):
 	if node.num and node.num > 1:
-		raise NotImplementedError("Couldn't break more than one statement")
+		raise NotImplementedError("Couldn't break more than one loop")
 	return ast.Break()
+
+@stdScope.registerTranslator
+def Stmt_Continue(processor, node):
+	if node.num and node.num > 1:
+		raise NotImplementedError("Couldn't continue more than one loop")
+	return ast.Continue()
 
 @stdScope.registerTranslator
 def Stmt_Throw(processor, node):
