@@ -357,8 +357,9 @@ def Stmt_Switch(processor, node):
 		return [ast.If(condition, processor.process(n.stmts), []), r]
 
 	default = [case for case in groups if not case.cond]
+	default = (default[0].stmts[:-1] if default[0].stmts[-1]._ == 'Stmt_Break' else default[0].stmts) if default else []
 
-	ifs = reduce(make_if, [case for case in groups if case.cond], processor.process(default[0].stmts) if len(default) else [])
+	ifs = reduce(make_if, [case for case in groups if case.cond], processor.process(default))
 	return [prepend] + ifs if prepend else ifs
 
 @stdScope.registerTranslator
@@ -370,6 +371,12 @@ def Stmt_For(processor, node):
 		[]
 	)
 	return processor.process(node.init) + [loop] if node.init else loop
+
+@stdScope.registerTranslator
+def Stmt_Break(processor, node):
+	if node.num and node.num > 1:
+		raise NotImplementedError("Couldn't break more than one statement")
+	return ast.Break()
 
 @stdScope.registerTranslator
 def Stmt_Unset(processor, node):
