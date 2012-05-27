@@ -275,6 +275,12 @@ def Expr_Instanceof(processor, node):
 	# Call(expr func, expr* args, keyword* keywords,expr? starargs, expr? kwargs)
 	return ast.Call(ast.Name('isinstance', []), [processor.process(node.expr)] + [processor.process(node['class'])], [], None, None)
 
+@stdScope.registerTranslator
+def Expr_ErrorSuppress(processor, node):
+	# TryExcept(stmt* body, excepthandler* handlers, stmt* orelse)
+	# ExceptHandler(expr? type, expr? name, stmt* body)
+	return ast.TryExcept([processor.process(node.expr)], [ast.ExceptHandler(ast.Name('BaseException', []), None, [ast.Pass()])], [])
+
 #### casts ####
 
 @stdScope.registerTranslator
@@ -440,6 +446,14 @@ def Stmt_Continue(processor, node):
 def Stmt_Throw(processor, node):
 	# Raise(expr? type, expr? inst, expr? tback)
 	return ast.Raise(processor.process(node.expr), None, None)
+
+@stdScope.registerTranslator
+def Stmt_TryCatch(processor, node):
+	# TryExcept(stmt* body, excepthandler* handlers, stmt* orelse)
+	# ExceptHandler(expr? type, expr? name, stmt* body)
+	return ast.TryExcept(processor.process(node.stmts), map(lambda catch: ast.ExceptHandler(
+		processor.process(catch.type), ast.Name(catch.var, []), processor.process(catch.stmts)
+	), node.catches), [])
 
 @stdScope.registerTranslator
 def Stmt_Unset(processor, node):
