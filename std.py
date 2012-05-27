@@ -28,12 +28,12 @@ def Stmt_ClassMethod(processor, node):
 	) if node.params else ([], [])
 	args = [ast.Name('self', [])] + names
 	arguments = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[None] + defaults)
-	body = processor.process(node.stmts)
+	body = processor.process(node.stmts) if node.stmts else [ast.Pass()]
 	return ast.FunctionDef(node.name, arguments, body, [])
 
 @stdScope.registerTranslator
 def Stmt_Return(processor, node):
-	return ast.Return(processor.process(node.expr))
+	return ast.Return(processor.process(node.expr) if node.expr else None)
 
 @stdScope.registerTranslator
 def Scalar_LNumber(processor, node):
@@ -47,9 +47,10 @@ def Scalar_String(processor, node):
 
 @stdScope.registerTranslator
 def Scalar_Encapsed(processor, node):
-	parts = [elem for elem in node.parts if isinstance(elem, basestring)]
+	parts = [elem.replace('%', '%%') for elem in node.parts if isinstance(elem, basestring)]
 	elems = [elem for elem in node.parts if not isinstance(elem, basestring)]
-	return ast.BinOp(ast.Str('%s'.join(parts)), ast.Mod(), ast.Tuple(processor.process(elems), []))
+	params = ast.Tuple(processor.process(elems), []) if len(elems) > 1 else processor.process(elems[0])
+	return ast.BinOp(ast.Str('%s'.join(parts)), ast.Mod(), params)
 
 @stdScope.registerTranslator
 def Const(processor, node):
@@ -81,10 +82,17 @@ def Expr_Variable(processor, node):
 
 @stdScope.registerTranslator
 def Expr_Assign(processor, node):
+	# xxx: $a[] = 42
+	if node.var._ == 'Expr_ArrayDimFetch' and node.var.dim is None:
+		return ast.Call(
+			ast.Attribute(processor.process(node.var.var), 'append', []),
+			[processor.process(node.expr)],
+			[], None, None)
 	return ast.Assign([processor.process(node.var)], processor.process(node.expr))
 
 @stdScope.registerTranslator
 def Expr_Isset(processor, node):
+	# todo: use context for isset!
 	# Compare(expr left, cmpop* ops, expr* comparators)
 	return ast.Compare(processor.process(node.vars[0]), [ast.IsNot()], [ast.Name('None', [])])
 
@@ -115,7 +123,8 @@ def Expr_FuncCall(processor, node):
 
 @stdScope.registerTranslator
 def Expr_MethodCall(processor, node):
-	return ast.Call(ast.Attribute(processor.process(node.var), node.name, []), processor.process(node.args), [], None, None)
+	name = node.name if isinstance(node.name, basestring) else '$$$'
+	return ast.Call(ast.Attribute(processor.process(node.var), name, []), processor.process(node.args), [], None, None)
 
 @stdScope.registerTranslator
 def Expr_StaticCall(processor, node):
@@ -128,7 +137,7 @@ def Expr_Array(processor, node):
 	# Call(expr func, expr* args, keyword* keywords, expr? starargs, expr? kwargs)
 	# Dict(expr* keys, expr* values)
 	# Name(identifier id, expr_context ctx)
-	keys, values = zip(*((item.key, item.value) for item in node.items))
+	keys, values = zip(*((item.key, item.value) for item in node.items)) if node.items else ([], [])
 	if not any(keys):
 		return ast.List(processor.process(values), [])
 	return ast.Dict(processor.process(keys), processor.process(values))
@@ -144,11 +153,8 @@ def Stmt_Property(processor, node):
 	return processor.process(node.props)[0]
 
 @stdScope.registerTranslator
-def Expr_Empty(processor, node): # todo: fix no empty
+def Expr_Empty(processor, node):
 	return ast.UnaryOp(ast.Not(), processor.process(node.var))
-
-
-
 
 ##### Expr
 
@@ -198,16 +204,23 @@ registerBinaryOp('Expr_Concat', ast.Add)
 
 registerUnaryOp('Expr_UnaryPlus', ast.UAdd)
 registerUnaryOp('Expr_UnaryMinus', ast.USub)
-registerUnaryOp('Expr_BooleanNot', ast.Not) # xxx: if value is int -> use invert
+
+@stdScope.registerTranslator
+def Expr_BooleanNot(processor, node):
+	# xxx: !empty($a)
+	if node.expr._ == 'Expr_Empty':
+		return processor.process(node.expr.var)
+	return ast.UnaryOp(ast.Not(), processor.process(node.expr))
 
 registerBoolOp('Expr_BooleanAnd', ast.And)
 registerBoolOp('Expr_BooleanOr', ast.Or)
 
 registerBoolOp('Expr_LogicalAnd', ast.And)
 registerBoolOp('Expr_LogicalOr', ast.Or)
-registerBinaryOp('Expr_LogicalXor', ast.BitXor)# todo: LogicalXor ???
+registerBinaryOp('Expr_LogicalXor', ast.BitXor)
 
 registerCmpOp('Expr_Equal', ast.Eq)
+registerCmpOp('Expr_NotEqual', ast.NotEq)
 registerCmpOp('Expr_Greater', ast.Gt)
 registerCmpOp('Expr_GreaterOrEqual', ast.GtE)
 registerCmpOp('Expr_Smaller', ast.Lt)
@@ -240,3 +253,28 @@ def Stmt_If(processor, node):
 	ifnodes = node.elseifs[::-1] + [node]
 	elsestmts = processor.process(getattr(node['else'], 'stmts', []))
 	return reduce(lambda r, n: [ast.If(processor.process(n.cond), processor.process(n.stmts), r)], ifnodes, elsestmts)[0]
+
+
+@stdScope.registerTranslator
+def Stmt_Foreach(processor, node):
+	if not node.keyVar:
+		return ast.For(processor.process(node.valueVar), processor.process(node.expr), processor.process(node.stmts), None)
+	# todo: emumerate(expr) or expr.items() ?
+	target = ast.Tuple(processor.process([node.keyVar,node.valueVar]), [])
+	expr = ast.Call(ast.Attribute(processor.process(node.expr), 'items', []), [], [], None, None)
+	return ast.For(target, expr, processor.process(node.stmts), None)
+
+
+@stdScope.registerTranslator
+def Stmt_Unset(processor, node):
+	return ast.Delete(processor.process(node.vars))
+
+#### casts # todo: other casts
+
+@stdScope.registerTranslator
+def Expr_Cast_Int(processor, node):
+	return ast.Call(ast.Name('int', []), [processor.process(node.expr)], [], None, None)
+
+@stdScope.registerTranslator
+def Expr_Cast_Double(processor, node):
+	return ast.Call(ast.Name('float', []), [processor.process(node.expr)], [], None, None)

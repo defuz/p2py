@@ -312,7 +312,7 @@ class SourceGenerator(NodeVisitor):
 	def visit_Delete(self, node):
 		self.newline(node)
 		self.write('del ')
-		for idx, target in enumerate(node):
+		for idx, target in enumerate(node.targets):
 			if idx:
 				self.write(', ')
 			self.visit(target)
@@ -342,8 +342,11 @@ class SourceGenerator(NodeVisitor):
 
 	def visit_Return(self, node):
 		self.newline(node)
-		self.write('return ')
-		self.visit(node.value)
+		if node.value:
+			self.write('return ')
+			self.visit(node.value)
+		else:
+			self.write('return')
 
 	def visit_Break(self, node):
 		self.newline(node)
@@ -376,6 +379,8 @@ class SourceGenerator(NodeVisitor):
 
 	def visit_Attribute(self, node):
 		self.visit(node.value)
+		if isinstance(node.attr, dict):
+			print ''.join(self.result)
 		self.write('.' + node.attr)
 
 	def visit_Call(self, node):
@@ -409,9 +414,17 @@ class SourceGenerator(NodeVisitor):
 		self.write(node.id)
 
 	def visit_Str(self, node):
-		s = repr(node.s)
-		if '\\n' in s:
-			s = '"""%s"""' % s[2:-1].replace('\\n', '\n')
+		s = node.s.replace('\\', '\\\\')
+		if '\n' in s:
+			s = '"""%s"""' % s
+		else:
+			s = s.replace('\n', '\\n')
+			quotCount = len([c for c in s if c == "'"])
+			quot2Count = len([c for c in s if c == '"'])
+			if quotCount >= quot2Count:
+				s = '"%s"' % s.replace('"', '\\"')
+			else:
+				s = "'%s'" % s.replace("'", "\\'")
 		self.write(s)
 
 	def visit_Bytes(self, node):
