@@ -140,6 +140,8 @@ registerAugAssign('Expr_AssignBitwiseXor', ast.BitXor)
 registerAugAssign('Expr_AssignShiftLeft', ast.LShift)
 registerAugAssign('Expr_AssignShiftRight', ast.RShift)
 
+# todo: cope with Expr_PreInc, Expr_PreDec, Expr_PostInc, Expr_PostDec
+
 ####################
 # Expressions
 ####################
@@ -173,6 +175,10 @@ def Expr_Assign(processor, node):
 			[processor.process(node.expr)],
 			[], None, None)
 	return ast.Assign([processor.process(node.var)], processor.process(node.expr))
+
+@stdScope.registerTranslator
+def Expr_AssignRef(processor, node):
+	return Expr_Assign(processor, node) # todo: make the difference
 
 @stdScope.registerTranslator
 def Expr_Isset(processor, node):
