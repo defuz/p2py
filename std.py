@@ -2,6 +2,7 @@
 #-*- coding:utf-8 -*-
 
 import ast
+import copy
 from translator import Scope
 
 stdScope = Scope()
@@ -26,10 +27,12 @@ def Stmt_ClassMethod(processor, node):
 		(ast.Name(item.name, []), processor.process(item.default) if item.default else None) for item in node.params)
 		)
 	) if node.params else ([], [])
-	args = [ast.Name('self', [])] + names
+	isStatic = node.type & 8
+	args = [ast.Name('self', [])] + names if not isStatic else names
 	arguments = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[None] + defaults)
 	body = processor.process(node.stmts) if node.stmts else [ast.Pass()]
-	return ast.FunctionDef(node.name, arguments, body, [])
+	decorators = [ast.Name('staticmethod', [])] if isStatic else []
+	return ast.FunctionDef(node.name, arguments, body, decorators)
 
 @stdScope.registerTranslator
 def Stmt_Return(processor, node):
@@ -262,6 +265,7 @@ registerAugAssign('Expr_AssignConcat', ast.Add)
 
 @stdScope.registerTranslator
 def Stmt_If(processor, node):
+	# If(expr test, stmt* body, stmt* orelse)
 	ifnodes = node.elseifs[::-1] + [node]
 	elsestmts = processor.process(getattr(node['else'], 'stmts', []))
 	return reduce(lambda r, n: [ast.If(processor.process(n.cond), processor.process(n.stmts), r)], ifnodes, elsestmts)[0]
@@ -271,11 +275,56 @@ def Stmt_If(processor, node):
 def Stmt_Foreach(processor, node):
 	if not node.keyVar:
 		return ast.For(processor.process(node.valueVar), processor.process(node.expr), processor.process(node.stmts), None)
-	# todo: emumerate(expr) or expr.items() ?
+	# todo: enumerate(expr) or expr.items() ?
 	target = ast.Tuple(processor.process([node.keyVar,node.valueVar]), [])
 	expr = ast.Call(ast.Attribute(processor.process(node.expr), 'items', []), [], [], None, None)
 	return ast.For(target, expr, processor.process(node.stmts), None)
 
+
+def pred_group(predicate, iterable):
+	groups = []
+	for x in iterable:
+		if predicate(x):
+			groups[-1].append(x)
+		else:
+			groups.append([x])
+	if not groups[0]:
+		groups.pop(0)
+	return groups
+
+@stdScope.registerTranslator
+def Stmt_Switch(processor, node):
+	groups = pred_group(lambda case: not case.stmts, node.cases[::-1])
+	def merge_cond(cases):
+		result = copy.deepcopy(cases[0])
+		result.cond = []
+		for case in cases[::-1]:
+			if case.cond:
+				result.cond.append(case.cond)
+		result.cond = result.cond if len(result.cond) > 1 else result.cond[0]
+		return result
+	groups = map(lambda group: group.pop() if len(group) == 1 else merge_cond(group), groups)
+
+	if node.cond._ == 'Expr_Assign':
+		value, prepend = processor.process(node.cond.var), processor.process(node.cond)
+	elif node.cond._ != 'Expr_Variable':
+		value, prepend = processor.process(node.cond), None
+	else:
+		value = ast.Name('switch_value', [])
+		prepend = ast.Assign([value], processor.process(node.cond))
+
+	def compare_value(condition):
+		return ast.Compare(value, [ast.Eq()], [processor.process(condition)])
+	def make_if(r, n):
+		condition = ast.BoolOp(ast.Or(), map(compare_value, n.cond)) if isinstance(n.cond, list) else compare_value(n.cond)
+		if n.stmts[-1]._ == 'Stmt_Break':
+			return ast.If(condition, processor.process(n.stmts[:-1]), r if isinstance(r, list) else [r])
+		return [ast.If(condition, processor.process(n.stmts), []), r]
+
+	default = [case for case in groups if not case.cond]
+
+	ifs = reduce(make_if, [case for case in groups if case.cond], processor.process(default[0].stmts) if len(default) else [])
+	return [prepend] + ifs if prepend else ifs
 
 @stdScope.registerTranslator
 def Stmt_Unset(processor, node):

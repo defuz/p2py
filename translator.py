@@ -55,7 +55,14 @@ class Processor(object):
 
 	def process(self, node):
 		if isinstance(node, (list, tuple)):
-			return [self.process(n) for n in node]
+			result = []
+			for n in node:
+				r = self.process(n)
+				if isinstance(r, (list, tuple)):
+					result.extend(r)
+				else:
+					result.append(r)
+			return result
 		return self.scope.getTranslator(node)(self, node)
 
 	def translate(self, nodes):
