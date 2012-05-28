@@ -2,30 +2,6 @@
 #-*- coding:utf-8 -*-
 
 import ast
-from base import *
-from itertools import repeat
-
-class PHPNode(Dict):
-	def __str__(self):
-		def valueToStr(value, deep):
-			if isinstance(value, dict):
-				if not deep:
-					return '<' + value.get('_', '?') + '>'
-				node = value.copy()
-				return '<' + node.pop('_', '?') + ': ' + ', '.join(key + ': ' + valueToStr(value, deep - 1) for key, value in node.items()) + '>'
-			if isinstance(value, list):
-				if not deep:
-					return '[...]'
-				return '[' + ', '.join(valueToStr(v, deep - 1) for v in value) + ']'
-			return str(value)
-		return valueToStr(self, 3)
-
-def getPHPAst(file):
-	result = os.popen("php ast.php " + file).read()
-	if result.startswith('Parse Error'):
-		raise Exception(result)
-	return json(result, PHPNode)
-
 
 class Scope(object):
 
@@ -65,5 +41,5 @@ class Processor(object):
 			return result
 		return self.scope.getTranslator(node)(self, node)
 
-	def translate(self, nodes):
-		return ast.Module(self.process(nodes))
+	def translate(self, node):
+		return self.process(node)

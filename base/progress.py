@@ -4,7 +4,9 @@
 from progressbar import ProgressBar
 
 def progress(query, count = None):
-	count = len(query) if count is None else count
+	if count is None:
+		query = tuple(query)
+		count = len(query)
 	if not count:
 		raise StopIteration
 	progressbar = ProgressBar(maxval=count)

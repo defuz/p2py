@@ -15,6 +15,10 @@ stdScope = Scope()
 ####################
 
 @stdScope.registerTranslator
+def File(processor, node):
+	return ast.Module(processor.process(node.stmts))
+
+@stdScope.registerTranslator
 def Name(processor, node):
 	# Name(identifier id, expr_context ctx)
 	return idnt(node.parts[0])
@@ -360,7 +364,6 @@ def Stmt_If(processor, node):
 	elsestmts = processor.process(getattr(node['else'], 'stmts', []))
 	return reduce(lambda r, n: [ast.If(processor.process(n.cond), processor.process(n.stmts), r)], ifnodes, elsestmts)[0]
 
-
 @stdScope.registerTranslator
 def Stmt_Foreach(processor, node):
 	if not node.keyVar:
@@ -459,9 +462,9 @@ def Stmt_Throw(processor, node):
 def Stmt_TryCatch(processor, node):
 	# TryExcept(stmt* body, excepthandler* handlers, stmt* orelse)
 	# ExceptHandler(expr? type, expr? name, stmt* body)
-	return ast.TryExcept(processor.process(node.stmts), map(lambda catch: ast.ExceptHandler(
-		processor.process(catch.type), idnt(catch.var), processor.process(catch.stmts)
-	), node.catches), [])
+	catches = [ast.ExceptHandler(processor.process(catch.type), idnt(catch.var), processor.process(catch.stmts))
+	                for catch in node.catches]
+	return ast.TryExcept(processor.process(node.stmts), catches, [])
 
 @stdScope.registerTranslator
 def Stmt_Unset(processor, node):

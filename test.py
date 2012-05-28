@@ -4,8 +4,7 @@
 from codegen import to_source
 from std import stdScope
 from translator import *
-
-import sys
+from php import getPHPAst
 
 def generate(file):
 	processor = Processor(stdScope)
@@ -13,11 +12,12 @@ def generate(file):
 	pythonAst = processor.translate(phpAst)
 	return to_source(pythonAst)
 
+if __name__ == '__main__':
+	import sys
+	if len(sys.argv) < 2:
+		print("Please specify filename")
+		sys.exit(1)
 
-if len(sys.argv) < 2:
-	print("Please specify filename")
-	sys.exit(1)
-
-print generate(sys.argv[1])
+	print generate(sys.argv[1])
 
 
