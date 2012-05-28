@@ -42,6 +42,16 @@ def Scalar_FuncConst(processor, node):
 	return ast.parse('inspect.currentframe().f_code.co_name')
 
 @stdScope.registerTranslator
+def Scalar_FileConst(processor, node):
+	# inspect.currentframe().f_code.co_filename
+	return ast.parse('inspect.currentframe().f_code.co_filename')
+
+@stdScope.registerTranslator
+def Scalar_ClassConst(processor, node):
+	# inspect.currentframe().f_method.im_class
+	return ast.parse('inspect.currentframe().f_method.im_class')
+
+@stdScope.registerTranslator
 def Scalar_Encapsed(processor, node):
 	parts = [elem.replace('%', '%%') if isinstance(elem, basestring) else '%s' for elem in node.parts]
 	vars = [elem for elem in node.parts if not isinstance(elem, basestring)]
