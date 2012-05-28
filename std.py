@@ -2,10 +2,13 @@
 #-*- coding:utf-8 -*-
 
 import ast
+from simply_ast import *
 import copy
 from translator import Scope
 
 stdScope = Scope()
+
+
 
 ####################
 # Basic constructs
@@ -14,7 +17,7 @@ stdScope = Scope()
 @stdScope.registerTranslator
 def Name(processor, node):
 	# Name(identifier id, expr_context ctx)
-	return ast.Name(node.parts[0], [])
+	return idnt(node.parts[0])
 
 @stdScope.registerTranslator
 def Scalar_LNumber(processor, node):
@@ -62,7 +65,7 @@ def Scalar_Encapsed(processor, node):
 def Const(processor, node):
 	# Assign(expr* targets, expr value)
 	# Name(identifier id, expr_context ctx)
-	return ast.Assign([ast.Name(node.name, [])], processor.process(node.value))
+	return ast.Assign([idnt(node.name)], processor.process(node.value))
 
 ####################
 # Operators
@@ -79,7 +82,6 @@ def registerBoolOp(phpNodeName, pythonOp):
 		return ast.BoolOp(pythonOp(), [processor.process(node.left), processor.process(node.right)])
 	translator.__name__ = phpNodeName
 	stdScope.registerTranslator(translator)
-
 
 def registerUnaryOp(phpNodeName, pythonOp):
 	def translator(processor, node):
@@ -116,7 +118,7 @@ registerBinaryOp('Expr_Mod', ast.Mod)
 registerBinaryOp('Expr_BitwiseAnd', ast.BitAnd)
 registerBinaryOp('Expr_BitwiseOr', ast.BitOr)
 registerBinaryOp('Expr_BitwiseXor', ast.BitXor)
-# registerAugAssign('Expr_BitwiseNot', ) todo: implement
+registerAugAssign('Expr_BitwiseNot', ast.Invert)
 registerBinaryOp('Expr_ShiftLeft', ast.LShift)
 registerBinaryOp('Expr_ShiftRight', ast.RShift)
 
@@ -166,7 +168,7 @@ registerAugAssign('Expr_AssignMod', ast.Mod)
 registerAugAssign('Expr_AssignBitwiseAnd', ast.BitAnd)
 registerAugAssign('Expr_AssignBitwiseOr', ast.BitOr)
 registerAugAssign('Expr_AssignBitwiseXor', ast.BitXor)
-# registerAugAssign('Expr_AssignBitwiseNot', ) todo: implement
+registerAugAssign('Expr_AssignBitwiseNot', ast.Invert)
 registerAugAssign('Expr_AssignShiftLeft', ast.LShift)
 registerAugAssign('Expr_AssignShiftRight', ast.RShift)
 
@@ -182,14 +184,12 @@ registerAugAssignOp('Expr_PostDec', ast.Sub)
 @stdScope.registerTranslator
 def Expr_ClassConstFetch(processor, node):
 	if node['class'].parts[0] == 'self':
-		return ast.Name(node.name, [])
-	return ast.Attribute(processor.process(node['class']), node.name, [])
+		return idnt(node.name)
+	return attr(processor, node['class'], node.name)
 
 @stdScope.registerTranslator
 def Expr_PropertyFetch(processor, node):
-	if not isinstance(node.name, basestring): # todo!
-		node.name = '$$$'
-	return ast.Attribute(processor.process(node.var), node.name, [])
+	return attr(processor, node.var, node.name)
 
 @stdScope.registerTranslator
 def Expr_ConstFetch(processor, node):
@@ -197,16 +197,14 @@ def Expr_ConstFetch(processor, node):
 
 @stdScope.registerTranslator
 def Expr_Variable(processor, node):
-	return ast.Name(node.name, [])
+	return idnt(node.name)
 
 @stdScope.registerTranslator
 def Expr_Assign(processor, node):
 	# xxx: $a[] = 42
 	if node.var._ == 'Expr_ArrayDimFetch' and node.var.dim is None:
-		return ast.Call(
-			ast.Attribute(processor.process(node.var.var), 'append', []),
-			[processor.process(node.expr)],
-			[], None, None)
+		return call(attr(processor, node.var.var, 'append'), [processor.process(node.expr)])
+	# todo: $this->$name = $value as setattr
 	return ast.Assign([processor.process(node.var)], processor.process(node.expr))
 
 @stdScope.registerTranslator
@@ -217,7 +215,7 @@ def Expr_AssignRef(processor, node):
 def Expr_Isset(processor, node):
 	# todo: use context for isset!
 	# Compare(expr left, cmpop* ops, expr* comparators)
-	return ast.Compare(processor.process(node.vars[0]), [ast.IsNot()], [ast.Name('None', [])])
+	return ast.Compare(processor.process(node.vars[0]), [ast.IsNot()], [idnt('None')])
 
 @stdScope.registerTranslator
 def Expr_Ternary(processor, node):
@@ -228,8 +226,8 @@ def Expr_Ternary(processor, node):
 def Expr_StaticPropertyFetch(processor, node):
 	# Attribute(expr value, identifier attr, expr_context ctx)
 	if node['class'].parts[0] == 'self':
-		return ast.Name(node.name, [])
-	return ast.Attribute(processor.process(node['class']), node.name, [])
+		return idnt(node.name)
+	return attr(processor, node['class'], node.name)
 
 @stdScope.registerTranslator
 def Expr_ArrayDimFetch(processor, node):
@@ -242,18 +240,18 @@ def Arg(processor, node):
 
 @stdScope.registerTranslator
 def Expr_FuncCall(processor, node):
-	return ast.Call(processor.process(node.name), processor.process(node.args), [], None, None)
+	return call(processor.process(node.name), processor.process(node.args))
 
 @stdScope.registerTranslator
 def Expr_MethodCall(processor, node):
 	name = node.name if isinstance(node.name, basestring) else '$$$'
-	return ast.Call(ast.Attribute(processor.process(node.var), name, []), processor.process(node.args), [], None, None)
+	return call(attr(processor, node.var, name), processor.process(node.args))
 
 @stdScope.registerTranslator
 def Expr_StaticCall(processor, node):
 	if node['class'].parts[0] == 'self':
-		return ast.Call(ast.Name(node.name, []), processor.process(node.args), [], None, None)
-	return ast.Call(ast.Attribute(processor.process(node['class']), node.name, []), processor.process(node.args), [], None, None)
+		return call(idnt(node.name), processor.process(node.args))
+	return call(attr(processor, node['class'], node.name), processor.process(node.args))
 
 @stdScope.registerTranslator
 def Expr_Array(processor, node):
@@ -278,28 +276,28 @@ def Expr_Empty(processor, node):
 @stdScope.registerTranslator
 def Expr_New(processor, node):
 	# Call(expr func, expr* args, keyword* keywords,expr? starargs, expr? kwargs)
-	return ast.Call(processor.process(node['class']), processor.process(node.args), [], None, None)
+	return call(processor.process(node['class']), processor.process(node.args))
 
 @stdScope.registerTranslator
 def Expr_Instanceof(processor, node):
 	# Call(expr func, expr* args, keyword* keywords,expr? starargs, expr? kwargs)
-	return ast.Call(ast.Name('isinstance', []), [processor.process(node.expr)] + [processor.process(node['class'])], [], None, None)
+	return call(idnt('isinstance'), [processor.process(node.expr)] + [processor.process(node['class'])])
 
 @stdScope.registerTranslator
 def Expr_ErrorSuppress(processor, node):
 	# TryExcept(stmt* body, excepthandler* handlers, stmt* orelse)
 	# ExceptHandler(expr? type, expr? name, stmt* body)
-	return ast.TryExcept([processor.process(node.expr)], [ast.ExceptHandler(ast.Name('BaseException', []), None, [ast.Pass()])], [])
+	return ast.TryExcept([processor.process(node.expr)], [ast.ExceptHandler(idnt('BaseException'), None, [ast.Pass()])], [])
 
 #### casts ####
 
 @stdScope.registerTranslator
 def Expr_Cast_Int(processor, node):
-	return ast.Call(ast.Name('int', []), [processor.process(node.expr)], [], None, None)
+	return call(idnt('int'), [processor.process(node.expr)])
 
 @stdScope.registerTranslator
 def Expr_Cast_Double(processor, node):
-	return ast.Call(ast.Name('float', []), [processor.process(node.expr)], [], None, None)
+	return call(idnt('float'), [processor.process(node.expr)])
 
 # todo: implement other casts
 
@@ -310,7 +308,7 @@ def Expr_Cast_Double(processor, node):
 @stdScope.registerTranslator
 def Stmt_Class(processor, node):
 	# ClassDef(identifier name, expr* bases, stmt* body, expr* decorator_list)
-	extends = [processor.process(node.extends)] if node.extends else [ast.Name('object', [])]
+	extends = [processor.process(node.extends)] if node.extends else [idnt('object')]
 	stmts = processor.process(node.stmts) if node.stmts else ast.Pass()
 	return ast.ClassDef(node.name, extends, stmts, [])
 
@@ -319,14 +317,14 @@ def Stmt_ClassMethod(processor, node):
 	# FunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list)
 	names, defaults = map(list,
 		zip(*(
-		(ast.Name(item.name, []), processor.process(item.default) if item.default else None) for item in node.params)
+		(idnt(item.name), processor.process(item.default) if item.default else None) for item in node.params)
 		)
 	) if node.params else ([], [])
 	isStatic = node.type & 8
-	args = [ast.Name('self', [])] + names if not isStatic else names
+	args = [idnt('self')] + names if not isStatic else names
 	arguments = ast.arguments(args=args, vararg=None, kwarg=None, defaults=[None] + defaults)
 	body = processor.process(node.stmts) if node.stmts else [ast.Pass()]
-	decorators = [ast.Name('staticmethod', [])] if isStatic else []
+	decorators = [idnt('staticmethod')] if isStatic else []
 	return ast.FunctionDef(node.name, arguments, body, decorators)
 
 @stdScope.registerTranslator
@@ -343,7 +341,7 @@ def Stmt_PropertyProperty(processor, node):
 	# Name(identifier id, expr_context ctx)
 	# xxx: class property without default value
 	if node.default:
-		return ast.Assign([ast.Name(node.name, [])], processor.process(node.default))
+		return ast.Assign([idnt(node.name)], processor.process(node.default))
 	else:
 		return str('# ' + node.name)
 
@@ -369,7 +367,7 @@ def Stmt_Foreach(processor, node):
 		return ast.For(processor.process(node.valueVar), processor.process(node.expr), processor.process(node.stmts), None)
 	# todo: enumerate(expr) or expr.items() ?
 	target = ast.Tuple(processor.process([node.keyVar,node.valueVar]), [])
-	expr = ast.Call(ast.Attribute(processor.process(node.expr), 'items', []), [], [], None, None)
+	expr = call(attr(processor, node.expr, 'items'), [])
 	return ast.For(target, expr, processor.process(node.stmts), None)
 
 @stdScope.registerTranslator
@@ -400,7 +398,7 @@ def Stmt_Switch(processor, node):
 	elif node.cond._ != 'Expr_Variable':
 		value, prepend = processor.process(node.cond), None
 	else:
-		value = ast.Name('switch_value', [])
+		value = idnt('switch_value')
 		prepend = ast.Assign([value], processor.process(node.cond))
 
 	def compare_value(condition):
@@ -421,7 +419,7 @@ def Stmt_Switch(processor, node):
 def Stmt_For(processor, node):
 	# While(expr test, stmt* body, stmt* orelse)
 	loop = ast.While(
-		processor.process(node.cond)[0] if node.cond else ast.Name('True', []),
+		processor.process(node.cond)[0] if node.cond else idnt('True'),
 		processor.process(node.stmts) + processor.process(node.loop),
 		[]
 	)
@@ -436,7 +434,7 @@ def Stmt_While(processor, node):
 def Stmt_Do(processor, node):
 	# While(expr test, stmt* body, stmt* orelse)
 	# If(expr test, stmt* body, stmt* orelse)
-	return ast.While(ast.Name('True', []), processor.process(node.stmts) + [ast.If(
+	return ast.While(idnt('True'), processor.process(node.stmts) + [ast.If(
 		ast.UnaryOp(ast.Not(), processor.process(node.cond)), [ast.Break()], []
 	)], [])
 
@@ -462,9 +460,10 @@ def Stmt_TryCatch(processor, node):
 	# TryExcept(stmt* body, excepthandler* handlers, stmt* orelse)
 	# ExceptHandler(expr? type, expr? name, stmt* body)
 	return ast.TryExcept(processor.process(node.stmts), map(lambda catch: ast.ExceptHandler(
-		processor.process(catch.type), ast.Name(catch.var, []), processor.process(catch.stmts)
+		processor.process(catch.type), idnt(catch.var), processor.process(catch.stmts)
 	), node.catches), [])
 
 @stdScope.registerTranslator
 def Stmt_Unset(processor, node):
+	# todo: unset($this->$name) as delattr
 	return ast.Delete(processor.process(node.vars))
