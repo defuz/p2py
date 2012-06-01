@@ -16,7 +16,7 @@ class Processor(object):
 				else:
 					result.append(r)
 			return result
-		return self.scope.getTranslator(node)(self, node)
+		return self.scope.translate(self, node)
 
 	def translate(self, node):
 		return self.process(node)

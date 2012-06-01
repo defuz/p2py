@@ -4,27 +4,27 @@
 import ast
 
 from simply_ast import *
-from scope import statement
+from scope import syntax
 
-@statement
+@syntax
 def Expr_ClassConstFetch(processor, node):
 	if node['class'].parts[0] == 'self':
 		return idnt(node.name)
 	return attr(processor, node['class'], node.name)
 
-@statement
+@syntax
 def Expr_PropertyFetch(processor, node):
 	return attr(processor, node.var, node.name)
 
-@statement
+@syntax
 def Expr_ConstFetch(processor, node):
 	return processor.process(node.name)
 
-@statement
+@syntax
 def Expr_Variable(processor, node):
 	return idnt(node.name)
 
-@statement
+@syntax
 def Expr_Assign(processor, node):
 	# xxx: $a[] = 42
 	if node.var._ == 'Expr_ArrayDimFetch' and node.var.dim is None:
@@ -32,52 +32,52 @@ def Expr_Assign(processor, node):
 	# todo: $this->$name = $value as setattr
 	return ast.Assign([processor.process(node.var)], processor.process(node.expr))
 
-@statement
+@syntax
 def Expr_AssignRef(processor, node):
 	return Expr_Assign(processor, node) # todo: make the difference
 
-@statement
+@syntax
 def Expr_Isset(processor, node):
 	# todo: use context for isset!
 	# Compare(expr left, cmpop* ops, expr* comparators)
 	return ast.Compare(processor.process(node.vars[0]), [ast.IsNot()], [idnt('None')])
 
-@statement
+@syntax
 def Expr_Ternary(processor, node):
 	# IfExp(expr test, expr body, expr orelse)
 	return ast.IfExp(processor.process(node.cond), processor.process(node['if']), processor.process(node['else']))
 
-@statement
+@syntax
 def Expr_StaticPropertyFetch(processor, node):
 	# Attribute(expr value, identifier attr, expr_context ctx)
 	if node['class'].parts[0] == 'self':
 		return idnt(node.name)
 	return attr(processor, node['class'], node.name)
 
-@statement
+@syntax
 def Expr_ArrayDimFetch(processor, node):
 	# Subscript(expr value, slice slice, expr_context ctx)
 	return ast.Subscript(processor.process(node.var), processor.process(node.dim), [])
 
-@statement
+@syntax
 def Arg(processor, node):
 	return processor.process(node.value)
 
-@statement
+@syntax
 def Expr_FuncCall(processor, node):
 	return call(processor.process(node.name), processor.process(node.args))
 
-@statement
+@syntax
 def Expr_MethodCall(processor, node):
 	return call(attr(processor, node.var, node.name), processor.process(node.args))
 
-@statement
+@syntax
 def Expr_StaticCall(processor, node):
 	if node['class'].parts[0] == 'self':
 		return call(idnt(node.name), processor.process(node.args))
 	return call(attr(processor, node['class'], node.name), processor.process(node.args))
 
-@statement
+@syntax
 def Expr_Array(processor, node):
 	# Call(expr func, expr* args, keyword* keywords, expr? starargs, expr? kwargs)
 	# Dict(expr* keys, expr* values)
@@ -93,21 +93,21 @@ def Expr_Array(processor, node):
 		keys = processor.process(keys)
 	return ast.Dict(keys, processor.process(values))
 
-@statement
+@syntax
 def Expr_Empty(processor, node):
 	return ast.UnaryOp(ast.Not(), processor.process(node.var))
 
-@statement
+@syntax
 def Expr_New(processor, node):
 	# Call(expr func, expr* args, keyword* keywords,expr? starargs, expr? kwargs)
 	return call(processor.process(node['class']), processor.process(node.args))
 
-@statement
+@syntax
 def Expr_Instanceof(processor, node):
 	# Call(expr func, expr* args, keyword* keywords,expr? starargs, expr? kwargs)
 	return call(idnt('isinstance'), [processor.process(node.expr)] + [processor.process(node['class'])])
 
-@statement
+@syntax
 def Expr_ErrorSuppress(processor, node):
 	# TryExcept(stmt* body, excepthandler* handlers, stmt* orelse)
 	# ExceptHandler(expr? type, expr? name, stmt* body)
@@ -115,11 +115,11 @@ def Expr_ErrorSuppress(processor, node):
 
 #### casts ####
 
-@statement
+@syntax
 def Expr_Cast_Int(processor, node):
 	return call(idnt('int'), [processor.process(node.expr)])
 
-@statement
+@syntax
 def Expr_Cast_Double(processor, node):
 	return call(idnt('float'), [processor.process(node.expr)])
 

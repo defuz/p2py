@@ -4,31 +4,31 @@
 import ast, copy
 
 from simply_ast import *
-from scope import statement
+from scope import syntax
 
-@statement
+@syntax
 def Name(processor, node):
 	# Name(identifier id, expr_context ctx)
 	return idnt(node.parts[0])
 
-@statement
+@syntax
 def Const(processor, node):
 	# Assign(expr* targets, expr value)
 	# Name(identifier id, expr_context ctx)
 	return ast.Assign([idnt(node.name)], processor.process(node.value))
 
-@statement
+@syntax
 def File(processor, node):
 	return ast.Module(processor.process(node.stmts))
 
-@statement
+@syntax
 def Stmt_Class(processor, node):
 	# ClassDef(identifier name, expr* bases, stmt* body, expr* decorator_list)
 	extends = [processor.process(node.extends)] if node.extends else [idnt('object')]
 	stmts = processor.process(node.stmts) if node.stmts else ast.Pass()
 	return ast.ClassDef(node.name, extends, stmts, [])
 
-@statement
+@syntax
 def Stmt_ClassMethod(processor, node):
 	# FunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list)
 	names, defaults = map(list,
@@ -43,15 +43,15 @@ def Stmt_ClassMethod(processor, node):
 	decorators = [idnt('staticmethod')] if isStatic else []
 	return ast.FunctionDef(node.name, arguments, body, decorators)
 
-@statement
+@syntax
 def Stmt_Return(processor, node):
 	return ast.Return(processor.process(node.expr) if node.expr else None)
 
-@statement
+@syntax
 def Stmt_ClassConst(processor, node):
 	return processor.process(node.consts)[0]
 
-@statement
+@syntax
 def Stmt_PropertyProperty(processor, node):
 	# Assign(expr* targets, expr value)
 	# Name(identifier id, expr_context ctx)
@@ -61,22 +61,22 @@ def Stmt_PropertyProperty(processor, node):
 	else:
 		return str('# ' + node.name)
 
-@statement
+@syntax
 def Stmt_Property(processor, node):
 	return processor.process(node.props)[0]
 
-@statement
+@syntax
 def Stmt_Echo(processor, node):
 	return ast.Print(None, processor.process(node.exprs), True)
 
-@statement
+@syntax
 def Stmt_If(processor, node):
 	# If(expr test, stmt* body, stmt* orelse)
 	ifnodes = node.elseifs[::-1] + [node]
 	elsestmts = processor.process(getattr(node['else'], 'stmts', []))
 	return reduce(lambda r, n: [ast.If(processor.process(n.cond), processor.process(n.stmts), r)], ifnodes, elsestmts)[0]
 
-@statement
+@syntax
 def Stmt_Foreach(processor, node):
 	if not node.keyVar:
 		return ast.For(processor.process(node.valueVar), processor.process(node.expr), processor.process(node.stmts), None)
@@ -85,7 +85,7 @@ def Stmt_Foreach(processor, node):
 	expr = call(attr(processor, node.expr, 'items'), [])
 	return ast.For(target, expr, processor.process(node.stmts), None)
 
-@statement
+@syntax
 def Stmt_Switch(processor, node):
 	def pred_group(predicate, iterable):
 		groups = []
@@ -130,7 +130,7 @@ def Stmt_Switch(processor, node):
 	ifs = reduce(make_if, [case for case in groups if case.cond], processor.process(default))
 	return [prepend] + ifs if prepend else ifs
 
-@statement
+@syntax
 def Stmt_For(processor, node):
 	# While(expr test, stmt* body, stmt* orelse)
 	loop = ast.While(
@@ -140,12 +140,12 @@ def Stmt_For(processor, node):
 	)
 	return processor.process(node.init) + [loop] if node.init else loop
 
-@statement
+@syntax
 def Stmt_While(processor, node):
 	# While(expr test, stmt* body, stmt* orelse)
 	return ast.While(processor.process(node.cond), processor.process(node.stmts), [])
 
-@statement
+@syntax
 def Stmt_Do(processor, node):
 	# While(expr test, stmt* body, stmt* orelse)
 	# If(expr test, stmt* body, stmt* orelse)
@@ -153,24 +153,24 @@ def Stmt_Do(processor, node):
 		ast.UnaryOp(ast.Not(), processor.process(node.cond)), [ast.Break()], []
 	)], [])
 
-@statement
+@syntax
 def Stmt_Break(processor, node):
 	if node.num and node.num > 1:
 		raise NotImplementedError("Couldn't break more than one loop")
 	return ast.Break()
 
-@statement
+@syntax
 def Stmt_Continue(processor, node):
 	if node.num and node.num > 1:
 		raise NotImplementedError("Couldn't continue more than one loop")
 	return ast.Continue()
 
-@statement
+@syntax
 def Stmt_Throw(processor, node):
 	# Raise(expr? type, expr? inst, expr? tback)
 	return ast.Raise(processor.process(node.expr), None, None)
 
-@statement
+@syntax
 def Stmt_TryCatch(processor, node):
 	# TryExcept(stmt* body, excepthandler* handlers, stmt* orelse)
 	# ExceptHandler(expr? type, expr? name, stmt* body)
@@ -178,7 +178,7 @@ def Stmt_TryCatch(processor, node):
 	                for catch in node.catches]
 	return ast.TryExcept(processor.process(node.stmts), catches, [])
 
-@statement
+@syntax
 def Stmt_Unset(processor, node):
 	# todo: unset($this->$name) as delattr
 	return ast.Delete(processor.process(node.vars))

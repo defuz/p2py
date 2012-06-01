@@ -1,40 +1,26 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 
-import ast
-
 from simply_ast import *
-from scope import statement
+from scope import syntax
 
 def registerBinaryOp(pythonOp):
-	def translator(processor, node):
-		return ast.BinOp(processor.process(node.left), pythonOp(), processor.process(node.right))
-	return statement(translator)
+	return syntax(lambda processor, node: ast.BinOp(processor.process(node.left), pythonOp(), processor.process(node.right)))
 
 def registerBoolOp(pythonOp):
-	def translator(processor, node):
-		return ast.BoolOp(pythonOp(), [processor.process(node.left), processor.process(node.right)])
-	return statement(translator)
+	return syntax(lambda processor, node: ast.BoolOp(pythonOp(), [processor.process(node.left), processor.process(node.right)]))
 
 def registerUnaryOp(pythonOp):
-	def translator(processor, node):
-		return ast.UnaryOp(pythonOp(), processor.process(node.expr))
-	return statement(translator)
+	return syntax(lambda processor, node: ast.UnaryOp(pythonOp(), processor.process(node.expr)))
 
 def registerCmpOp(pythonOp):
-	def translator(processor, node):
-		return ast.Compare(processor.process(node.left), [pythonOp()], [processor.process(node.right)])
-	return statement(translator)
+	return syntax(lambda processor, node: ast.Compare(processor.process(node.left), [pythonOp()], [processor.process(node.right)]))
 
 def registerAugAssign(pythonOp):
-	def translator(processor, node):
-		return ast.AugAssign(processor.process(node.var), pythonOp(), processor.process(node.expr))
-	return statement(translator)
+	return syntax(lambda processor, node: ast.AugAssign(processor.process(node.var), pythonOp(), processor.process(node.expr)))
 
 def registerAugAssignOp(pythonOp):
-	def translator(processor, node):
-		return ast.AugAssign(processor.process(node.var), pythonOp(), ast.Num(1))
-	return statement(translator)
+	return syntax(lambda processor, node: ast.AugAssign(processor.process(node.var), pythonOp(), ast.Num(1)))
 
 # arithmetic ops
 Expr_Plus = registerBinaryOp(ast.Add)
@@ -62,7 +48,7 @@ Expr_UnaryMinus = registerUnaryOp(ast.USub)
 Expr_BooleanAnd = registerBoolOp(ast.And)
 Expr_BooleanOr = registerBoolOp(ast.Or)
 
-@statement
+@syntax
 def Expr_BooleanNot(processor, node):
 	# xxx: !empty($a)
 	if node.expr._ == 'Expr_Empty':
