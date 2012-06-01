@@ -113,8 +113,7 @@ def Expr_ErrorSuppress(processor, node):
 	# ExceptHandler(expr? type, expr? name, stmt* body)
 	return ast.TryExcept([processor.process(node.expr)], [ast.ExceptHandler(idnt('BaseException'), None, [ast.Pass()])], [])
 
-#### casts ####
-
+# casts
 @syntax
 def Expr_Cast_Int(processor, node):
 	return call(idnt('int'), [processor.process(node.expr)])

@@ -65,7 +65,6 @@ mb_encode_mimeheader: 1
 #other funcs
 define: 95
 date: 53
-li_link: 37
 is_numeric: 35
 extract: 17
 urldecode: 16

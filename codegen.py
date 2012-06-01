@@ -106,12 +106,15 @@ class SourceGenerator(NodeVisitor):
 			self.write('# line: %s' % node.lineno)
 			self.new_lines = 1
 
-	def body(self, statements):
-		self.new_line = True
-		self.indentation += 1
+	def stmts(self, statements):
 		for stmt in statements:
 			self.newline()
 			self.visit(stmt)
+
+	def body(self, statements):
+		self.new_line = True
+		self.indentation += 1
+		self.stmts(statements)
 		self.indentation -= 1
 
 	def body_or_else(self, node):
@@ -163,6 +166,9 @@ class SourceGenerator(NodeVisitor):
 
 	def visit_str(self, node):
 		self.result.append('\n' + self.indent_with * self.indentation + node)
+
+	def visit_Module(self, node):
+		self.stmts(node.body)
 
 	def visit_Assign(self, node):
 		self.newline(node)
@@ -467,8 +473,9 @@ class SourceGenerator(NodeVisitor):
 
 	def visit_BinOp(self, node):
 		self.visit(node.left)
-		self.write(' %s ' % BINOP_SYMBOLS[type(node.op)])
-		self.visit(node.right)
+		for operand in node.right:
+			self.write(' %s ' % BINOP_SYMBOLS[type(node.op)])
+			self.visit(operand)
 
 	def visit_BoolOp(self, node):
 		self.write('(')

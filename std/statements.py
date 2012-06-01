@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 
-import ast, copy
+import copy
 
 from simply_ast import *
 from scope import syntax
